@@ -1,11 +1,22 @@
+import { useEffect, useState } from "react";
+import { getCurrentUser } from "aws-amplify/auth";
+import Login from "./Login";
 import TruckMap from "./TruckMap";
 
 export default function App() {
-  return (
-    <main style={{ padding: "24px"}}>
-      <h1>ColdChain</h1>
-      <p>Monitor trucks locations in real time</p>
-      <TruckMap/>
-    </main>
-  )
+    const [signedIn, setSignedIn] = useState(false);
+    const [checkingAuth, setCheckingAuth] = useState(true);
+
+    useEffect(() => {
+        getCurrentUser()
+            .then(() => setSignedIn(true))
+            .catch(() => setSignedIn(false))
+            .finally(() => setCheckingAuth(false));
+    }, []);
+
+    if (checkingAuth) {
+        return <p>Loading...</p>;
+    }
+
+    return signedIn ? <TruckMap /> : <Login />;
 }
