@@ -1,4 +1,3 @@
-
 import { useEffect, useRef } from "react";
 import { Map, Marker, NavigationControl, Popup, setWorkerUrl } from "maplibre-gl";
 import { fetchAuthSession } from "aws-amplify/auth";
@@ -32,10 +31,16 @@ export default function TruckMap() {
     });
 
     map.addControl(new NavigationControl(), "top-right");
-    
+
+    const markers = new globalThis.Map<string, Marker>();
     let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+    let requestInProgress = false;
 
     async function loadTrucks() {
+      if (cancelled || requestInProgress) return;
+      requestInProgress = true;
+
       try {
         const session = await fetchAuthSession();
         const idToken = session.tokens?.idToken?.toString();
@@ -47,7 +52,6 @@ export default function TruckMap() {
         const response = await fetch(truckApiUrl, {
           headers: {
             Authorization: `Bearer ${idToken}`,
-            "Content-Type": "application/json",
           },
         });
 
@@ -55,39 +59,87 @@ export default function TruckMap() {
           throw new Error(`Truck API returned ${response.status}`);
         }
 
-        const apiResponse = await response.json();
-        const trucks: Truck[] =
-          typeof apiResponse.body === "string"
-            ? JSON.parse(apiResponse.body)
-            : apiResponse.body;
+        const trucks: Truck[] = await response.json();
 
         if (cancelled) return;
 
+        const currentTruckIds = new Set<string>();
+
         for (const truck of trucks) {
-          new Marker({ color: "#d64545" })
-            .setLngLat([truck.longitude, truck.latitude])
-            .setPopup(
+          currentTruckIds.add(truck.truckId);
+
+          const coordinates: [number, number] = [
+            truck.longitude,
+            truck.latitude,
+          ];
+
+          let marker = markers.get(truck.truckId);
+
+          if (marker) {
+            marker.setLngLat(coordinates);
+
+            marker.setPopup(
               new Popup().setText(
-                `${truck.truckId}\n${new Date(truck.sampleTime).toLocaleString()}`
+                `${truck.truckId}\n${new Date(
+                  truck.sampleTime
+                ).toLocaleString()}`
               )
-            )
-            .addTo(map);
+            );
+          } else {
+            marker = new Marker({ color: "#d64545" })
+              .setLngLat(coordinates)
+              .setPopup(
+                new Popup().setText(
+                  `${truck.truckId}\n${new Date(
+                    truck.sampleTime
+                  ).toLocaleString()}`
+                )
+              )
+              .addTo(map);
+
+            markers.set(truck.truckId, marker);
+          }
+        }
+
+        for (const [truckId, marker] of markers) {
+          if (!currentTruckIds.has(truckId)) {
+            marker.remove();
+            markers.delete(truckId);
+          }
         }
       } catch (error) {
-        console.error("Could not load truck locations:", error);
+        if (!cancelled) {
+          console.error("Could not load truck locations:", error);
+        }
+      } finally {
+        requestInProgress = false;
       }
     }
-
-    loadTrucks();
 
     map.on("error", (event) => {
       console.error("Map error:", event.error);
     });
 
+    void loadTrucks();
+
+    intervalId = setInterval(() => {
+      void loadTrucks();
+    }, 5000);
+
     return () => {
       cancelled = true;
+
+      if (intervalId !== undefined) {
+        clearInterval(intervalId);
+      }
+
+      for (const marker of markers.values()) {
+        marker.remove();
+      }
+
+      markers.clear();
       map.remove();
-    }
+    };
   }, []);
 
   return (
