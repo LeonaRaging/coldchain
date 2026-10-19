@@ -45,7 +45,9 @@ export default function TruckMap() {
 
     const markers = new globalThis.Map<string, Marker>();
     let cancelled = false;
-    let intervalId: ReturnType<typeof setInterval> | undefined;
+    const intervalId = setInterval(() => {
+      void loadTrucks();
+    }, 5000);
     let requestInProgress = false;
 
     async function loadTrucks() {
@@ -133,16 +135,10 @@ export default function TruckMap() {
 
     void loadTrucks();
 
-    intervalId = setInterval(() => {
-      void loadTrucks();
-    }, 5000);
-
     return () => {
       cancelled = true;
 
-      if (intervalId !== undefined) {
-        clearInterval(intervalId);
-      }
+      clearInterval(intervalId);
 
       for (const marker of markers.values()) {
         marker.remove();

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getCurrentUser } from "aws-amplify/auth";
-import Login from "./Login";
-import ForgotPassword from "./ForgotPassword";
-import Register from "./Register";
-import TruckMap from "./TruckMap";
+import Login from "../features/auth/Login";
+import ForgotPassword from "../features/auth/ForgotPassword";
+import Register from "../features/auth/Register";
+import TruckMap from "../features/fleet/TruckMap";
 
 export default function App() {
     const [signedIn, setSignedIn] = useState(false);

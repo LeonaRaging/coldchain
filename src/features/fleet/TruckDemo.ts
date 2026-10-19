@@ -1,4 +1,4 @@
-import { Map, Marker, Popup, LngLatBounds } from "maplibre-gl";
+import { Map } from "maplibre-gl";
 import { TruckPath, SearchPlace } from "./location";
 import { fetchAuthSession } from "aws-amplify/auth";
 
