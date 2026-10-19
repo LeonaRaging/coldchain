@@ -1,30 +1,45 @@
 import React, { useState } from "react";
-import { signIn, signUp, confirmSignUp } from "aws-amplify/auth"
+import { Link } from "react-router-dom";
+import { signIn } from "aws-amplify/auth";
+import "./Login.css";
 
-export default function Login() {
-    const [email, setEmail] = useState("");
+type LoginProps = {
+    onSignedIn: () => void;
+};
+
+export default function Login({ onSignedIn }: LoginProps) {
+    const [step, setStep] = useState<"username" | "password">("username");
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState("");
-    const [loading, SetLoading] = useState(false);
-    const [confirmationCode, setConfirmationCode] = useState("");
-    const [needsConfirmation, setNeedsConfirmation] = useState(false);
+    const [loading, setLoading] = useState(false);
 
-    async function handleLogin(
-        event: React.FormEvent<HTMLFormElement>
-    ) {
+
+    function handleNext(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
         setError("");
-        SetLoading(true);
+        setStep("password");
+    }
+
+
+    function handleBack() {
+        setError("");
+        setPassword("");
+        setShowPassword(false);
+        setStep("username");
+    }
+
+    async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        setError("");
+        setLoading(true);
 
         try {
-            const result = await signIn({
-                username,
-                password,
-            });
+            const result = await signIn({ username, password });
 
             if (result.isSignedIn) {
-                window.location.assign("/dashboard");
+                onSignedIn();
             } else {
                 setError(
                     "Additional verification is required. Please complete the sign-in challenge."
@@ -33,108 +48,93 @@ export default function Login() {
         } catch {
             setError("Login failed. Check your credentials and try again.");
         } finally {
-            SetLoading(false);
-        }
-    }
-
-    async function handleSignUp() {
-        setError("");
-
-        try {
-            const result = await signUp({
-                username,
-                password,
-                options: {
-                    userAttributes: {
-                        email,
-                    }
-                }
-            });
-
-            if (result.nextStep.signUpStep === "CONFIRM_SIGN_UP") {
-                setNeedsConfirmation(true);
-                setError("Check your email for the confirmation code.");
-            }
-        } catch {
-            setError("Sign up failed. Check your details and try again.")
-        }
-    }
-
-    async function handleConfirmSignUp(event: React.FormEvent<HTMLFormElement>) {
-        event.preventDefault();
-        setError("");
-
-        try {
-            await confirmSignUp({
-                username,
-                confirmationCode,
-            });
-
-            setNeedsConfirmation(false);
-            setError("Account confirmed. You can now sign in.");
-        } catch {
-            setError("Invalid confirmation code.");
+            setLoading(false);
         }
     }
 
     return (
         <main className="login-page">
             <section className="login-card">
-                <h1>ColdChain</h1>
+                {step === "username" ? (
+                    <>
+                        <h1>Sign in</h1>
+                        <p className="subtitle">Sign in to your account.</p>
 
-                {needsConfirmation ? (
-                    <form onSubmit={handleConfirmSignUp}>
-                        <label htmlFor="confirmationCode">Confirmation code</label>
-                        <input
-                            id="confirmationCode"
-                            value={confirmationCode}
-                            onChange={(event) => setConfirmationCode(event.target.value)}
-                            required
-                        />
-                    </form>
+                        <form onSubmit={handleNext}>
+                            <div className="field">
+                                <label htmlFor="username">Username</label>
+                                <input
+                                    id="username"
+                                    type="text"
+                                    placeholder="Enter username"
+                                    value={username}
+                                    onChange={(event) => setUsername(event.target.value)}
+                                    autoComplete="username"
+                                    autoFocus
+                                    required
+                                />
+                            </div>
+
+                            <button type="submit">Next</button>
+                        </form>
+
+                        <p className="auth-link">
+                            New user? <Link to="/register">Create an account</Link>
+                        </p>
+                    </>
                 ) : (
-                    <form onSubmit={handleLogin}>
-                        <label htmlFor="email">Email</label>
-                        <input
-                            id="email"
-                            type="text"
-                            value={email}
-                            onChange={(event) => setEmail(event.target.value)}
-                            autoComplete="username"
-                            required
-                        />
-                        <label htmlFor="username">Username</label>
-                        <input
-                            id="username"
-                            type="text"
-                            value={username}
-                            onChange={(event) => setUsername(event.target.value)}
-                            autoComplete="username"
-                            required
-                        />
+                    <>
+                        <h1>Enter your password</h1>
 
-                        <label htmlFor="password">Password</label>
-                        <input
-                            id="password"
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            autoComplete="current-password"
-                            required
-                        />
+                        <form onSubmit={handleLogin}>
+                            <div className="field">
+                                <label htmlFor="password">Password</label>
+                                <input
+                                    id="password"
+                                    type={showPassword ? "text" : "password"}
+                                    placeholder="Enter password"
+                                    value={password}
+                                    onChange={(event) => setPassword(event.target.value)}
+                                    autoComplete="current-password"
+                                    autoFocus
+                                    required
+                                />
 
-                        {error && <p role="alert">{error}</p>}
+                                <div className="field-row">
+                                    <label className="checkbox">
+                                        <input
+                                            type="checkbox"
+                                            checked={showPassword}
+                                            onChange={(event) => setShowPassword(event.target.checked)}
+                                        />
+                                        Show password
+                                    </label>
 
-                        <button type="submit" disabled={loading}>
-                            {loading ? "Signing in..." : "Sign in"}
-                        </button>
+                                    <Link to="/forgot-password" state={{ username }}>
+                                        Forgot your password?
+                                    </Link>
+                                </div>
+                            </div>
 
-                        <button type="button" onClick={handleSignUp} disabled={loading}>
-                            Sign up
-                        </button>
-                    </form>
+                            {error && <p role="alert">{error}</p>}
+
+                            <div className="actions">
+                                <button type="submit" disabled={loading}>
+                                    {loading ? "Signing in..." : "Continue"}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="secondary"
+                                    onClick={handleBack}
+                                    disabled={loading}
+                                >
+                                    Back
+                                </button>
+                            </div>
+                        </form>
+                    </>
                 )}
             </section>
         </main>
-    )
+    );
 }
