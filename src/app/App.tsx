@@ -20,7 +20,7 @@ export default function App() {
     if (checkingAuth) {
         return <p>Loading...</p>;
     }
- 
+
     return (
         <BrowserRouter>
             <Routes>
@@ -44,7 +44,13 @@ export default function App() {
                 />
                 <Route
                     path="/"
-                    element={signedIn ? <TruckMap /> : <Navigate to="/login" replace />}
+                    element={
+                        signedIn ? (
+                            <TruckMap onSignedOut={() => setSignedIn(false)} />
+                        ) : (
+                            <Navigate to="/login" replace />
+                        )
+                    }
                 />
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Map, Marker, NavigationControl, Popup, setWorkerUrl } from "maplibre-gl";
-import { fetchAuthSession } from "aws-amplify/auth";
+import { fetchAuthSession, signOut } from "aws-amplify/auth";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { startDemo } from "./TruckDemo";
 import DemoJourney from "./DemoJourney";
@@ -10,23 +10,35 @@ const region = import.meta.env.VITE_AWS_REGION;
 const mapName = import.meta.env.VITE_LOCATION_MAP_NAME;
 const truckApiUrl = import.meta.env.VITE_TRUCKS_API_URL;
 
-
 setWorkerUrl(new URL("maplibre-gl/dist/maplibre-gl-worker.mjs", import.meta.url).toString());
 
 type Truck = {
-  truckId: string,
-  longitude: number,
+  truckId: string;
+  longitude: number;
   latitude: number;
   sampleTime: string;
-}
+};
 
-export default function TruckMap() {
+type TruckMapProps = {
+  onSignedOut: () => void;
+};
+
+export default function TruckMap({ onSignedOut }: TruckMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map | null>(null);
 
   const [source, setSource] = useState("Hanoi");
   const [destination, setDestination] = useState("Ho Chi Minh City");
   const [truckId, setTruckId] = useState("DEMO-001");
+
+  async function goToLogin() {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error("Sign out failed:", error);
+    }
+    onSignedOut();
+  }
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -161,6 +173,28 @@ export default function TruckMap() {
     >
       {/* Fleet Locations */}
       <section>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "12px" }}>
+          <button
+            type="button"
+            onClick={goToLogin}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "10px 20px",
+              background: "#06b6d4",
+              color: "#082f49",
+              border: "none",
+              borderRadius: "8px",
+              fontSize: "14px",
+              fontWeight: 700,
+              cursor: "pointer",
+              boxShadow: "0 2px 8px rgba(6, 182, 212, 0.35)",
+            }}
+          >
+            Sign out
+          </button>
+        </div>
         <div
           style={{
             fontSize: "20px",
