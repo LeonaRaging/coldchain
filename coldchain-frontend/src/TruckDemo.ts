@@ -1,7 +1,8 @@
 import { Map, Marker, Popup, LngLatBounds } from "maplibre-gl";
 import { TruckPath, SearchPlace } from "./location";
+import { fetchAuthSession } from "aws-amplify/auth";
 
-let demoMarker: Marker | null = null;
+const TruckCreateUrl = import.meta.env.VITE_TRUCKS_CREATE_URL;
 
 export async function startDemo(
   map: Map,
@@ -27,7 +28,7 @@ export async function startDemo(
 
     if (!end) {
       throw new Error(`Could not find destination: ${destination}`);
-    }  
+    }
 
     const lineStringPath = await TruckPath(start, end);
 
@@ -37,96 +38,38 @@ export async function startDemo(
 
     const lineString = lineStringPath;
 
-    if (demoMarker) {
-      demoMarker.remove();
-    }
+    const session = await fetchAuthSession();
+    const idToken = session.tokens?.idToken?.toString();
 
-    if (demoMarker) {
-      demoMarker.remove();
-    }
+    let time = 0;
 
-    demoMarker = new Marker({ color: "#00c8d7" })
-      .setLngLat(start)
-      .setPopup(
-        new Popup().setText(truckId)
-    )
-    .addTo(map);
+    async function sendTruckData() {
+      try {
+        await fetch(TruckCreateUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({
+            truck_id: truckId,
+            longitude: lineString[time][0],
+            latitude: lineString[time][1],
+            temperature: 0
+          }),
+        });
 
-    const duration = 60_000;
-    const startTime = performance.now();
-
-    function animateTruck(currentTime: number) {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-
-      const index = Math.min(
-        Math.floor(progress * (lineString.length - 1)),
-        lineString.length - 1
-      );
-
-      const point = lineString[index];
-
-      if (!point || point.length < 2) {
-        return;
+        time++;
+      } catch (error) {
+        console.error("Failed to send truck data:", error);
       }
 
-      demoMarker.setLngLat([
-        point[0],
-        point[1],
-      ]);
-
-      if (progress < 1) {
-        requestAnimationFrame(animateTruck);
+      if (time < lineString.length) {
+        setTimeout(sendTruckData, 5000);
       }
     }
 
-    requestAnimationFrame(animateTruck);
-
-    const geojson = {
-      type: "Feature" as const,
-      properties: {},
-      geometry: {
-        type: "LineString" as const,
-        coordinates: lineString,
-      },
-    };
-
-    if (map.getLayer("LineString")) {
-      map.removeLayer("LineString");
-    }
-
-    if (map.getSource("LineString")) {
-      map.removeSource("LineString");
-    }
-
-    map.addSource("LineString", {
-      type: "geojson",
-      data: geojson,
-    });
-
-    map.addLayer({
-      id: "LineString",
-      type: "line",
-      source: "LineString",
-      layout: {
-        "line-join": "round",
-        "line-cap": "round",
-      },
-      paint: {
-        "line-color": "#BF93E4",
-        "line-width": 5,
-      },
-    });
-
-    const bounds = new LngLatBounds();
-
-    bounds.extend(start);
-    bounds.extend(end);
-
-    map.fitBounds(bounds, {
-      padding: 80,
-      duration: 1000,
-    });
+    sendTruckData();
 
   } catch (error) {
     console.error("ROUTE ERROR:", error);
