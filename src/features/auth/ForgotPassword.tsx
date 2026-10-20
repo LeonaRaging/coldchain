@@ -83,7 +83,7 @@ export default function ForgotPassword() {
 
         try {
             await resetPassword({ username: username.trim() });
-            setInfo("We sent a code to your email.");
+            setInfo("If an account with that username exists, a password reset code will be sent to the associated email address.");
             setCodeSent(true);
         } catch (err) {
             console.error(err);
