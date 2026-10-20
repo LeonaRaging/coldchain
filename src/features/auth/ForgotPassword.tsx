@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { resetPassword, confirmResetPassword } from "aws-amplify/auth";
-import "./Login.css";
 
 type AuthError = { name?: string; message?: string };
 
@@ -132,20 +131,21 @@ export default function ForgotPassword() {
     }
 
     return (
-        <main className="login-page">
-            <section className="login-card">
+        <main className="fixed inset-0 z-10 flex overflow-y-auto bg-gray-100 p-5 text-left font-sans text-sm leading-snug text-gray-900">
+            <section className="m-auto box-border flex w-full max-w-sm flex-col gap-2 rounded-lg border border-gray-300 bg-white p-6">
                 {codeSent ? (
                     <>
-                        <h1>Reset your password</h1>
-                        <p className="subtitle">
+                        <h1 className="m-0 mb-1 text-left text-2xl font-bold leading-tight tracking-normal text-gray-900">Reset your password</h1>
+                        <p className="m-0 text-sm text-gray-900">
                             {info || "Enter the code we sent to your email."}
                         </p>
 
-                        <form onSubmit={handleReset}>
-                            <div className="field">
-                                <label htmlFor="code">Confirmation code</label>
+                        <form className="mt-2 flex flex-col gap-4" onSubmit={handleReset}>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-sm font-bold text-gray-900" htmlFor="code">Confirmation code</label>
                                 <input
                                     id="code"
+                                    className="box-border h-8 w-full rounded-md border border-gray-400 bg-white px-3 text-sm text-gray-900 outline-none placeholder:italic placeholder:text-gray-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                                     type="text"
                                     placeholder="Enter confirmation code"
                                     value={code}
@@ -155,10 +155,11 @@ export default function ForgotPassword() {
                                 />
                             </div>
 
-                            <div className="field">
-                                <label htmlFor="newPassword">New password</label>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-sm font-bold text-gray-900" htmlFor="newPassword">New password</label>
                                 <input
                                     id="newPassword"
+                                    className="box-border h-8 w-full rounded-md border border-gray-400 bg-white px-3 text-sm text-gray-900 outline-none placeholder:italic placeholder:text-gray-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                                     type="password"
                                     placeholder="Enter new password"
                                     value={newPassword}
@@ -168,15 +169,15 @@ export default function ForgotPassword() {
                                 />
                             </div>
 
-                            {error && <p role="alert">{error}</p>}
+                            {error && <p className="m-0 text-sm text-red-600" role="alert">{error}</p>}
 
-                            <div className="actions">
-                                <button type="submit" disabled={loading}>
+                            <div className="flex flex-col gap-2">
+                                <button className="h-8 cursor-pointer rounded border-none bg-blue-600 text-sm font-bold text-white transition-colors enabled:hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60" type="submit" disabled={loading}>
                                     {loading ? "Saving..." : "Reset password"}
                                 </button>
                                 <button
+                                    className="h-8 cursor-pointer rounded border-2 border-blue-600 bg-white text-sm font-bold text-blue-600 transition-colors enabled:hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
                                     type="button"
-                                    className="secondary"
                                     onClick={handleResend}
                                     disabled={loading}
                                 >
@@ -187,14 +188,15 @@ export default function ForgotPassword() {
                     </>
                 ) : (
                     <>
-                        <h1>Forgot your password?</h1>
-                        <p className="subtitle">We will email you a code to reset it.</p>
+                        <h1 className="m-0 mb-1 text-left text-2xl font-bold leading-tight tracking-normal text-gray-900">Forgot your password?</h1>
+                        <p className="m-0 text-sm text-gray-900">We will email you a code to reset it.</p>
 
-                        <form onSubmit={handleSendCode}>
-                            <div className="field">
-                                <label htmlFor="username">Username</label>
+                        <form className="mt-2 flex flex-col gap-4" onSubmit={handleSendCode}>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-sm font-bold text-gray-900" htmlFor="username">Username</label>
                                 <input
                                     id="username"
+                                    className="box-border h-8 w-full rounded-md border border-gray-400 bg-white px-3 text-sm text-gray-900 outline-none placeholder:italic placeholder:text-gray-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                                     type="text"
                                     placeholder="Enter username"
                                     value={username}
@@ -208,17 +210,17 @@ export default function ForgotPassword() {
                                 />
                             </div>
 
-                            {error && <p role="alert">{error}</p>}
+                            {error && <p className="m-0 text-sm text-red-600" role="alert">{error}</p>}
 
-                            <div className="actions">
-                                <button type="submit" disabled={loading}>
+                            <div className="flex flex-col gap-2">
+                                <button className="h-8 cursor-pointer rounded border-none bg-blue-600 text-sm font-bold text-white transition-colors enabled:hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60" type="submit" disabled={loading}>
                                     {loading ? "Sending..." : "Send code"}
                                 </button>
 
                                 {showConfirmEmail && (
                                     <button
+                                        className="h-8 cursor-pointer rounded border-2 border-blue-600 bg-white text-sm font-bold text-blue-600 transition-colors enabled:hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
                                         type="button"
-                                        className="secondary"
                                         onClick={goToConfirmEmail}
                                         disabled={loading}
                                     >
@@ -230,8 +232,8 @@ export default function ForgotPassword() {
                     </>
                 )}
 
-                <p className="auth-link">
-                    <Link to="/login">Back to sign in</Link>
+                <p className="m-0 mt-1 text-center text-sm text-gray-900">
+                    <Link className="text-blue-600 no-underline hover:underline" to="/login">Back to sign in</Link>
                 </p>
             </section>
         </main>

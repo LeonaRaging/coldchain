@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { signUp, confirmSignUp, resendSignUpCode } from "aws-amplify/auth";
-import "./Login.css";
 
 
 const PASSWORD_RULES = [
@@ -155,18 +154,19 @@ export default function Register() {
     }
 
     return (
-        <main className="login-page">
-            <section className="login-card">
+        <main className="fixed inset-0 z-10 flex overflow-y-auto bg-gray-100 p-5 text-left font-sans text-sm leading-snug text-gray-900">
+            <section className="m-auto box-border flex w-full max-w-sm flex-col gap-2 rounded-lg border border-gray-300 bg-white p-6">
                 {needsConfirmation ? (
                     <>
-                        <h1>Confirm account</h1>
-                        {message && <p className="subtitle">{message}</p>}
+                        <h1 className="m-0 mb-1 text-left text-2xl font-bold leading-tight tracking-normal text-gray-900">Confirm account</h1>
+                        {message && <p className="m-0 text-sm text-gray-900">{message}</p>}
 
-                        <form onSubmit={handleConfirmSignUp}>
-                            <div className="field">
-                                <label htmlFor="confirmationCode">Confirmation code</label>
+                        <form className="mt-2 flex flex-col gap-4" onSubmit={handleConfirmSignUp}>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-sm font-bold text-gray-900" htmlFor="confirmationCode">Confirmation code</label>
                                 <input
                                     id="confirmationCode"
+                                    className="box-border h-8 w-full rounded-md border border-gray-400 bg-white px-3 text-sm text-gray-900 outline-none placeholder:italic placeholder:text-gray-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                                     type="text"
                                     placeholder="Enter confirmation code"
                                     value={confirmationCode}
@@ -177,15 +177,15 @@ export default function Register() {
                                 />
                             </div>
 
-                            {error && <p role="alert">{error}</p>}
+                            {error && <p className="m-0 text-sm text-red-600" role="alert">{error}</p>}
 
-                            <div className="actions">
-                                <button type="submit" disabled={loading}>
+                            <div className="flex flex-col gap-2">
+                                <button className="h-8 cursor-pointer rounded border-none bg-blue-600 text-sm font-bold text-white transition-colors enabled:hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60" type="submit" disabled={loading}>
                                     {loading ? "Confirming..." : "Confirm account"}
                                 </button>
                                 <button
+                                    className="h-8 cursor-pointer rounded border-2 border-blue-600 bg-white text-sm font-bold text-blue-600 transition-colors enabled:hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
                                     type="button"
-                                    className="secondary"
                                     onClick={handleResend}
                                     disabled={loading}
                                 >
@@ -196,14 +196,15 @@ export default function Register() {
                     </>
                 ) : (
                     <>
-                        <h1>Sign up</h1>
-                        <p className="subtitle">Create a new account.</p>
+                        <h1 className="m-0 mb-1 text-left text-2xl font-bold leading-tight tracking-normal text-gray-900">Sign up</h1>
+                        <p className="m-0 text-sm text-gray-900">Create a new account.</p>
 
-                        <form onSubmit={handleSignUp}>
-                            <div className="field">
-                                <label htmlFor="username">Username</label>
+                        <form className="mt-2 flex flex-col gap-4" onSubmit={handleSignUp}>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-sm font-bold text-gray-900" htmlFor="username">Username</label>
                                 <input
                                     id="username"
+                                    className="box-border h-8 w-full rounded-md border border-gray-400 bg-white px-3 text-sm text-gray-900 outline-none placeholder:italic placeholder:text-gray-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                                     type="text"
                                     placeholder="Enter username"
                                     value={username}
@@ -215,10 +216,11 @@ export default function Register() {
                                 />
                             </div>
 
-                            <div className="field">
-                                <label htmlFor="email">Email address</label>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-sm font-bold text-gray-900" htmlFor="email">Email address</label>
                                 <input
                                     id="email"
+                                    className="box-border h-8 w-full rounded-md border border-gray-400 bg-white px-3 text-sm text-gray-900 outline-none placeholder:italic placeholder:text-gray-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                                     type="email"
                                     placeholder="Enter email address"
                                     value={email}
@@ -228,10 +230,11 @@ export default function Register() {
                                 />
                             </div>
 
-                            <div className="field">
-                                <label htmlFor="password">Password</label>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-sm font-bold text-gray-900" htmlFor="password">Password</label>
                                 <input
                                     id="password"
+                                    className="box-border h-8 w-full rounded-md border border-gray-400 bg-white px-3 text-sm text-gray-900 outline-none placeholder:italic placeholder:text-gray-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                                     type={showPassword ? "text" : "password"}
                                     placeholder="Enter password"
                                     value={password}
@@ -241,11 +244,11 @@ export default function Register() {
                                     required
                                 />
                                 {password.length > 0 && (
-                                    <ul id="password-rules" className="password-rules">
+                                    <ul id="password-rules" className="m-0 list-none p-0 text-sm text-gray-500">
                                         {PASSWORD_RULES.map((rule) => {
                                             const passed = rule.test(password);
                                             return (
-                                                <li key={rule.label} className={passed ? "ok" : ""}>
+                                                <li key={rule.label} className={passed ? "text-green-700" : ""}>
                                                     {passed ? "✓" : "✗"} {rule.label}
                                                 </li>
                                             );
@@ -254,10 +257,11 @@ export default function Register() {
                                 )}
                             </div>
 
-                            <div className="field">
-                                <label htmlFor="confirmPassword">Confirm password</label>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-sm font-bold text-gray-900" htmlFor="confirmPassword">Confirm password</label>
                                 <input
                                     id="confirmPassword"
+                                    className="box-border h-8 w-full rounded-md border border-gray-400 bg-white px-3 text-sm text-gray-900 outline-none placeholder:italic placeholder:text-gray-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                                     type={showPassword ? "text" : "password"}
                                     placeholder="Confirm password"
                                     value={confirmPassword}
@@ -267,8 +271,9 @@ export default function Register() {
                                 />
                             </div>
 
-                            <label className="checkbox">
+                            <label className="flex cursor-pointer items-center gap-2 text-sm font-normal">
                                 <input
+                                    className="m-0 h-4 w-4 p-0 accent-blue-600"
                                     type="checkbox"
                                     checked={showPassword}
                                     onChange={(event) => setShowPassword(event.target.checked)}
@@ -276,10 +281,10 @@ export default function Register() {
                                 Show password
                             </label>
 
-                            {error && <p role="alert">{error}</p>}
+                            {error && <p className="m-0 text-sm text-red-600" role="alert">{error}</p>}
 
-                            <div className="actions">
-                                <button type="submit" disabled={loading}>
+                            <div className="flex flex-col gap-2">
+                                <button className="h-8 cursor-pointer rounded border-none bg-blue-600 text-sm font-bold text-white transition-colors enabled:hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60" type="submit" disabled={loading}>
                                     {loading ? "Creating account..." : "Sign up"}
                                 </button>
                             </div>
@@ -287,8 +292,8 @@ export default function Register() {
                     </>
                 )}
 
-                <p className="auth-link">
-                    Have an account already? <Link to="/login">Sign in</Link>
+                <p className="m-0 mt-1 text-center text-sm text-gray-900">
+                    Have an account already? <Link className="text-blue-600 no-underline hover:underline" to="/login">Sign in</Link>
                 </p>
             </section>
         </main>
