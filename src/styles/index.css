@@ -1,14 +1,1 @@
 @import "tailwindcss";
-
-@layer base {
-  html {
-    scrollbar-gutter: stable;
-  }
-
-  #root {
-    display: flex;
-    width: 100%;
-    min-height: 100svh;
-    flex-direction: column;
-  }
-}

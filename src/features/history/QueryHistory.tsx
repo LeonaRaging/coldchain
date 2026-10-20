@@ -102,45 +102,45 @@ export default function QueryHistory() {
     : [];
 
   return (
-    <section className="rounded-lg border border-[#374151] bg-[#111827] px-7 pb-7 pt-6 text-left text-[#f3f4f6]">
-      <div className="mb-[22px] grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1">
-        <div className="col-start-1 row-start-1 flex items-center gap-2.5">
-          <span className="text-xl text-[#22d3ee]">🕒</span>
-          <span className="truncate text-[17px] font-semibold">Query history</span>
+    <section className="rounded-lg border border-gray-700 bg-gray-900 px-7 pb-7 pt-6 text-left text-gray-100">
+      <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          <span className="text-xl text-cyan-400">🕒</span>
+          <span className="truncate text-lg font-semibold">Query history</span>
         </div>
 
-        <div className="col-start-2 row-start-1 whitespace-nowrap text-right">
+        <div className="whitespace-nowrap text-right">
           {result ? (
-            <div className="font-mono text-xs text-[#6b7280]">Truck {result.truckId}</div>
+            <div className="font-mono text-xs text-gray-500">Truck {result.truckId}</div>
           ) : (
-            <div className="text-[13px] text-[#9ca3af]">No query yet</div>
+            <div className="text-sm text-gray-400">No query yet</div>
           )}
         </div>
 
-        <div className="col-span-2 row-start-2 text-xs text-[#9ca3af]">From the data lake · newest first</div>
+        <div className="basis-full text-xs text-gray-400">From the data lake · newest first</div>
       </div>
 
-      <form className="grid grid-cols-[minmax(0,1fr)_84px_auto] items-end gap-2.5" onSubmit={handleSubmit}>
-        <div>
-          <label className="mb-[7px] block text-xs text-[#9ca3af]" htmlFor="history-truck">
+      <form className="flex items-end gap-2.5" onSubmit={handleSubmit}>
+        <div className="min-w-0 flex-1">
+          <label className="mb-2 block text-xs text-gray-400" htmlFor="history-truck">
             Truck ID
           </label>
           <input
             id="history-truck"
-            className="box-border w-full rounded-md border border-[#374151] bg-[#1f2937] px-3 py-2.5 text-sm text-[#f3f4f6] outline-none [color-scheme:dark]"
+            className="box-border w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-gray-100 outline-none scheme-dark"
             value={truckId}
             onChange={(event) => setTruckId(event.target.value)}
             placeholder="e.g. DEMO-001"
           />
         </div>
 
-        <div>
-          <label className="mb-[7px] block text-xs text-[#9ca3af]" htmlFor="history-limit">
+        <div className="w-20">
+          <label className="mb-2 block text-xs text-gray-400" htmlFor="history-limit">
             Limit
           </label>
           <input
             id="history-limit"
-            className="box-border w-full rounded-md border border-[#374151] bg-[#1f2937] px-3 py-2.5 text-sm text-[#f3f4f6] outline-none [color-scheme:dark]"
+            className="box-border w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-gray-100 outline-none scheme-dark"
             type="number"
             min={1}
             step={1}
@@ -152,51 +152,51 @@ export default function QueryHistory() {
 
         <button
           type="submit"
-          className="h-[39px] cursor-pointer whitespace-nowrap rounded-md border-none bg-[#06b6d4] px-5 text-sm font-bold text-[#082f49] disabled:cursor-default disabled:opacity-70"
+          className="h-10 cursor-pointer whitespace-nowrap rounded-md border-none bg-cyan-500 px-5 text-sm font-bold text-cyan-950 disabled:cursor-default disabled:opacity-70"
           disabled={loading}
         >
           {loading ? "Querying..." : "Query"}
         </button>
       </form>
 
-      {error && <div className="mt-4 rounded-md border border-[rgba(239,68,68,0.4)] bg-[rgba(239,68,68,0.12)] px-3 py-2.5 text-[13px] text-[#f87171]">{error}</div>}
+      {error && <div className="mt-4 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2.5 text-sm text-red-400">{error}</div>}
 
       <div className="mb-3 mt-6 flex flex-wrap items-center justify-between gap-3">
         <div className="font-bold">Route points</div>
         {result && (
-          <div className="text-[13px] text-[#9ca3af]">
+          <div className="text-sm text-gray-400">
             {shownRecords.length} of {result.count}
           </div>
         )}
       </div>
 
       {loading ? (
-        <p className="text-[13px] text-[#9ca3af]">Running Athena query…</p>
+        <p className="text-sm text-gray-400">Running Athena query…</p>
       ) : result && result.records.length > 0 ? (
         <div className="flex flex-col gap-2">
           {shownRecords.map((record, index) => {
             const temperature = formatTemperature(record);
             return (
-              <div key={index} className="rounded-md border border-[#1f2937] bg-[#0f172a] px-3 py-2.5">
+              <div key={index} className="rounded-md border border-gray-800 bg-slate-900 px-3 py-2.5">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-mono text-xs text-[#d1d5db]">{formatTimestamp(record)}</span>
+                  <span className="font-mono text-xs text-gray-300">{formatTimestamp(record)}</span>
                   <span
                     className={
                       temperature.hot
-                        ? "text-[13px] font-bold text-[#f87171]"
-                        : "text-[13px] font-bold text-[#22d3ee]"
+                        ? "text-sm font-bold text-red-400"
+                        : "text-sm font-bold text-cyan-400"
                     }
                   >
                     {temperature.text}
                   </span>
                 </div>
-                <div className="mt-1 break-words font-mono text-xs text-[#9ca3af]">{formatCoords(record)}</div>
+                <div className="mt-1 break-words font-mono text-xs text-gray-400">{formatCoords(record)}</div>
               </div>
             );
           })}
         </div>
       ) : (
-        <p className="text-[13px] text-[#9ca3af]">
+        <p className="text-sm text-gray-400">
           {result
             ? `No events found for truck ${result.truckId}.`
             : "Enter a truck ID, then run a query."}

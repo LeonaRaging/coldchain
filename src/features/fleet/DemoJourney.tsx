@@ -8,9 +8,9 @@ type DemoJourneyProps = {
   onStart: () => void;
 };
 
-const labelClass = "mb-[7px] block text-xs text-[#9ca3af]";
+const labelClass = "mb-2 block text-xs text-gray-400";
 const inputClass =
-  "box-border w-full rounded-md border border-[#374151] bg-[#1f2937] px-3 py-2.5 text-sm text-[#f3f4f6] outline-none";
+  "box-border w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-gray-100 outline-none";
 
 export default function DemoJourney({
   source,
@@ -22,23 +22,23 @@ export default function DemoJourney({
   onStart,
 }: DemoJourneyProps) {
   return (
-    <section className="border-t border-[#374151] bg-[#111827] px-7 pb-7 pt-6 text-[#f3f4f6]">
+    <section className="border-t border-gray-700 bg-gray-900 px-7 pb-7 pt-6 text-gray-100">
       {/* Header */}
-      <div className="mb-[22px] flex items-center justify-between">
+      <div className="mb-5 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <span className="text-xl text-[#22d3ee]">🚚</span>
-          <span className="text-[17px] font-semibold">Demo journey</span>
+          <span className="text-xl text-cyan-400">🚚</span>
+          <span className="text-lg font-semibold">Demo journey</span>
         </div>
 
-        <span className="text-[13px] text-[#9ca3af]">
+        <span className="text-sm text-gray-400">
           Simulated GPS · straight-line journey · 60 seconds
         </span>
       </div>
 
       {/* Form */}
-      <div className="grid grid-cols-[1fr_1fr_1fr_auto] items-end gap-4">
+      <div className="flex items-end gap-4">
         {/* Source */}
-        <div>
+        <div className="min-w-0 flex-1">
           <label className={labelClass}>Source</label>
           <input
             value={source}
@@ -48,7 +48,7 @@ export default function DemoJourney({
         </div>
 
         {/* Destination */}
-        <div>
+        <div className="min-w-0 flex-1">
           <label className={labelClass}>Destination</label>
           <input
             value={destination}
@@ -58,7 +58,7 @@ export default function DemoJourney({
         </div>
 
         {/* Truck ID */}
-        <div>
+        <div className="min-w-0 flex-1">
           <label className={labelClass}>Truck ID</label>
           <input
             value={truckId}
@@ -70,7 +70,7 @@ export default function DemoJourney({
         {/* Button */}
         <button
           onClick={onStart}
-          className="h-[39px] cursor-pointer whitespace-nowrap rounded-md border-none bg-[#06b6d4] px-5 text-sm font-bold text-[#082f49]"
+          className="h-10 cursor-pointer whitespace-nowrap rounded-md border-none bg-cyan-500 px-5 text-sm font-bold text-cyan-950"
         >
           ▶ Start demo
         </button>

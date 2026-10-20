@@ -163,38 +163,38 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
   }, []);
 
   return (
-    <div className="box-border min-h-screen bg-[#0b1120] p-6 text-left text-[#f3f4f6]">
-      <div className="grid grid-cols-[minmax(0,1fr)_1078px_minmax(0,1fr)] items-start gap-6 max-[1600px]:mx-auto max-[1600px]:flex max-[1600px]:max-w-[1078px] max-[1600px]:flex-col max-[1600px]:gap-[18px]">
-        <aside className="min-w-0 pt-[88px] max-[1600px]:order-2 max-[1600px]:w-full max-[1600px]:pt-0">
+    <div className="box-border min-h-screen bg-slate-950 p-6 text-left text-gray-100">
+      <div className="grid grid-cols-[minmax(0,1fr)_1078px_minmax(0,1fr)] items-start gap-6 max-2xl:mx-auto max-2xl:flex max-2xl:max-w-5xl max-2xl:flex-col max-2xl:gap-4">
+        <aside className="min-w-0 pt-22 max-2xl:order-2 max-2xl:w-full max-2xl:pt-0">
           <QueryHistory />
         </aside>
 
-        <main className="min-w-0 max-[1600px]:order-1 max-[1600px]:w-full">
+        <main className="min-w-0 max-2xl:order-1 max-2xl:w-full">
           {/* Fleet Locations */}
           <section>
         <div className="mb-3 flex justify-end gap-2.5">
           <button
             type="button"
             onClick={goToLogin}
-            className="inline-flex cursor-pointer items-center gap-2 rounded-lg border-none bg-[#06b6d4] px-5 py-2.5 text-sm font-bold text-[#082f49] shadow-[0_2px_8px_rgba(6,182,212,0.35)]"
+            className="inline-flex cursor-pointer items-center gap-2 rounded-lg border-none bg-cyan-500 px-5 py-2.5 text-sm font-bold text-cyan-950 shadow-lg shadow-cyan-500/30"
           >
             Sign out
           </button>
         </div>
-        <div className="mb-3.5 text-xl font-bold tracking-[0.04em]">
+        <div className="mb-3.5 text-xl font-bold tracking-wide">
           FLEET LOCATIONS
         </div>
 
-        <div className="overflow-hidden rounded-lg border border-[#374151] bg-[#111827]">
+        <div className="overflow-hidden rounded-lg border border-gray-700 bg-gray-900">
           <div
             ref={containerRef}
-            className="h-[420px] w-full"
+            className="h-105 w-full"
           />
         </div>
       </section>
 
       {/* Demo Journey */}
-      <div className="mt-[18px] overflow-hidden rounded-lg border border-[#374151]">
+      <div className="mt-5 overflow-hidden rounded-lg border border-gray-700">
         <DemoJourney
           source={source}
           destination={destination}
