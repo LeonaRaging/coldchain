@@ -1,7 +1,22 @@
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { resetPassword, confirmResetPassword } from "aws-amplify/auth";
-import "./Login.css";
+import {
+    authActions,
+    authButton,
+    authButtonSecondary,
+    authCard,
+    authError,
+    authField,
+    authForm,
+    authInput,
+    authLabel,
+    authLink,
+    authLinkRow,
+    authPage,
+    authSubtitle,
+    authTitle,
+} from "./authStyles";
 
 type AuthError = { name?: string; message?: string };
 
@@ -132,20 +147,21 @@ export default function ForgotPassword() {
     }
 
     return (
-        <main className="login-page">
-            <section className="login-card">
+        <main className={authPage}>
+            <section className={authCard}>
                 {codeSent ? (
                     <>
-                        <h1>Reset your password</h1>
-                        <p className="subtitle">
+                        <h1 className={authTitle}>Reset your password</h1>
+                        <p className={authSubtitle}>
                             {info || "Enter the code we sent to your email."}
                         </p>
 
-                        <form onSubmit={handleReset}>
-                            <div className="field">
-                                <label htmlFor="code">Confirmation code</label>
+                        <form className={authForm} onSubmit={handleReset}>
+                            <div className={authField}>
+                                <label className={authLabel} htmlFor="code">Confirmation code</label>
                                 <input
                                     id="code"
+                                    className={authInput}
                                     type="text"
                                     placeholder="Enter confirmation code"
                                     value={code}
@@ -155,10 +171,11 @@ export default function ForgotPassword() {
                                 />
                             </div>
 
-                            <div className="field">
-                                <label htmlFor="newPassword">New password</label>
+                            <div className={authField}>
+                                <label className={authLabel} htmlFor="newPassword">New password</label>
                                 <input
                                     id="newPassword"
+                                    className={authInput}
                                     type="password"
                                     placeholder="Enter new password"
                                     value={newPassword}
@@ -168,15 +185,15 @@ export default function ForgotPassword() {
                                 />
                             </div>
 
-                            {error && <p role="alert">{error}</p>}
+                            {error && <p className={authError} role="alert">{error}</p>}
 
-                            <div className="actions">
-                                <button type="submit" disabled={loading}>
+                            <div className={authActions}>
+                                <button className={authButton} type="submit" disabled={loading}>
                                     {loading ? "Saving..." : "Reset password"}
                                 </button>
                                 <button
+                                    className={authButtonSecondary}
                                     type="button"
-                                    className="secondary"
                                     onClick={handleResend}
                                     disabled={loading}
                                 >
@@ -187,14 +204,15 @@ export default function ForgotPassword() {
                     </>
                 ) : (
                     <>
-                        <h1>Forgot your password?</h1>
-                        <p className="subtitle">We will email you a code to reset it.</p>
+                        <h1 className={authTitle}>Forgot your password?</h1>
+                        <p className={authSubtitle}>We will email you a code to reset it.</p>
 
-                        <form onSubmit={handleSendCode}>
-                            <div className="field">
-                                <label htmlFor="username">Username</label>
+                        <form className={authForm} onSubmit={handleSendCode}>
+                            <div className={authField}>
+                                <label className={authLabel} htmlFor="username">Username</label>
                                 <input
                                     id="username"
+                                    className={authInput}
                                     type="text"
                                     placeholder="Enter username"
                                     value={username}
@@ -208,17 +226,17 @@ export default function ForgotPassword() {
                                 />
                             </div>
 
-                            {error && <p role="alert">{error}</p>}
+                            {error && <p className={authError} role="alert">{error}</p>}
 
-                            <div className="actions">
-                                <button type="submit" disabled={loading}>
+                            <div className={authActions}>
+                                <button className={authButton} type="submit" disabled={loading}>
                                     {loading ? "Sending..." : "Send code"}
                                 </button>
 
                                 {showConfirmEmail && (
                                     <button
+                                        className={authButtonSecondary}
                                         type="button"
-                                        className="secondary"
                                         onClick={goToConfirmEmail}
                                         disabled={loading}
                                     >
@@ -230,8 +248,8 @@ export default function ForgotPassword() {
                     </>
                 )}
 
-                <p className="auth-link">
-                    <Link to="/login">Back to sign in</Link>
+                <p className={authLinkRow}>
+                    <Link className={authLink} to="/login">Back to sign in</Link>
                 </p>
             </section>
         </main>

@@ -1,7 +1,26 @@
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { signUp, confirmSignUp, resendSignUpCode } from "aws-amplify/auth";
-import "./Login.css";
+import {
+    authActions,
+    authButton,
+    authButtonSecondary,
+    authCard,
+    authCheckbox,
+    authCheckboxInput,
+    authError,
+    authField,
+    authForm,
+    authInput,
+    authLabel,
+    authLink,
+    authLinkRow,
+    authPage,
+    authRuleOk,
+    authRules,
+    authSubtitle,
+    authTitle,
+} from "./authStyles";
 
 
 const PASSWORD_RULES = [
@@ -155,18 +174,19 @@ export default function Register() {
     }
 
     return (
-        <main className="login-page">
-            <section className="login-card">
+        <main className={authPage}>
+            <section className={authCard}>
                 {needsConfirmation ? (
                     <>
-                        <h1>Confirm account</h1>
-                        {message && <p className="subtitle">{message}</p>}
+                        <h1 className={authTitle}>Confirm account</h1>
+                        {message && <p className={authSubtitle}>{message}</p>}
 
-                        <form onSubmit={handleConfirmSignUp}>
-                            <div className="field">
-                                <label htmlFor="confirmationCode">Confirmation code</label>
+                        <form className={authForm} onSubmit={handleConfirmSignUp}>
+                            <div className={authField}>
+                                <label className={authLabel} htmlFor="confirmationCode">Confirmation code</label>
                                 <input
                                     id="confirmationCode"
+                                    className={authInput}
                                     type="text"
                                     placeholder="Enter confirmation code"
                                     value={confirmationCode}
@@ -177,15 +197,15 @@ export default function Register() {
                                 />
                             </div>
 
-                            {error && <p role="alert">{error}</p>}
+                            {error && <p className={authError} role="alert">{error}</p>}
 
-                            <div className="actions">
-                                <button type="submit" disabled={loading}>
+                            <div className={authActions}>
+                                <button className={authButton} type="submit" disabled={loading}>
                                     {loading ? "Confirming..." : "Confirm account"}
                                 </button>
                                 <button
+                                    className={authButtonSecondary}
                                     type="button"
-                                    className="secondary"
                                     onClick={handleResend}
                                     disabled={loading}
                                 >
@@ -196,14 +216,15 @@ export default function Register() {
                     </>
                 ) : (
                     <>
-                        <h1>Sign up</h1>
-                        <p className="subtitle">Create a new account.</p>
+                        <h1 className={authTitle}>Sign up</h1>
+                        <p className={authSubtitle}>Create a new account.</p>
 
-                        <form onSubmit={handleSignUp}>
-                            <div className="field">
-                                <label htmlFor="username">Username</label>
+                        <form className={authForm} onSubmit={handleSignUp}>
+                            <div className={authField}>
+                                <label className={authLabel} htmlFor="username">Username</label>
                                 <input
                                     id="username"
+                                    className={authInput}
                                     type="text"
                                     placeholder="Enter username"
                                     value={username}
@@ -215,10 +236,11 @@ export default function Register() {
                                 />
                             </div>
 
-                            <div className="field">
-                                <label htmlFor="email">Email address</label>
+                            <div className={authField}>
+                                <label className={authLabel} htmlFor="email">Email address</label>
                                 <input
                                     id="email"
+                                    className={authInput}
                                     type="email"
                                     placeholder="Enter email address"
                                     value={email}
@@ -228,10 +250,11 @@ export default function Register() {
                                 />
                             </div>
 
-                            <div className="field">
-                                <label htmlFor="password">Password</label>
+                            <div className={authField}>
+                                <label className={authLabel} htmlFor="password">Password</label>
                                 <input
                                     id="password"
+                                    className={authInput}
                                     type={showPassword ? "text" : "password"}
                                     placeholder="Enter password"
                                     value={password}
@@ -241,11 +264,11 @@ export default function Register() {
                                     required
                                 />
                                 {password.length > 0 && (
-                                    <ul id="password-rules" className="password-rules">
+                                    <ul id="password-rules" className={authRules}>
                                         {PASSWORD_RULES.map((rule) => {
                                             const passed = rule.test(password);
                                             return (
-                                                <li key={rule.label} className={passed ? "ok" : ""}>
+                                                <li key={rule.label} className={passed ? authRuleOk : ""}>
                                                     {passed ? "✓" : "✗"} {rule.label}
                                                 </li>
                                             );
@@ -254,10 +277,11 @@ export default function Register() {
                                 )}
                             </div>
 
-                            <div className="field">
-                                <label htmlFor="confirmPassword">Confirm password</label>
+                            <div className={authField}>
+                                <label className={authLabel} htmlFor="confirmPassword">Confirm password</label>
                                 <input
                                     id="confirmPassword"
+                                    className={authInput}
                                     type={showPassword ? "text" : "password"}
                                     placeholder="Confirm password"
                                     value={confirmPassword}
@@ -267,8 +291,9 @@ export default function Register() {
                                 />
                             </div>
 
-                            <label className="checkbox">
+                            <label className={authCheckbox}>
                                 <input
+                                    className={authCheckboxInput}
                                     type="checkbox"
                                     checked={showPassword}
                                     onChange={(event) => setShowPassword(event.target.checked)}
@@ -276,10 +301,10 @@ export default function Register() {
                                 Show password
                             </label>
 
-                            {error && <p role="alert">{error}</p>}
+                            {error && <p className={authError} role="alert">{error}</p>}
 
-                            <div className="actions">
-                                <button type="submit" disabled={loading}>
+                            <div className={authActions}>
+                                <button className={authButton} type="submit" disabled={loading}>
                                     {loading ? "Creating account..." : "Sign up"}
                                 </button>
                             </div>
@@ -287,8 +312,8 @@ export default function Register() {
                     </>
                 )}
 
-                <p className="auth-link">
-                    Have an account already? <Link to="/login">Sign in</Link>
+                <p className={authLinkRow}>
+                    Have an account already? <Link className={authLink} to="/login">Sign in</Link>
                 </p>
             </section>
         </main>

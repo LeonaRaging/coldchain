@@ -8,6 +8,10 @@ type DemoJourneyProps = {
   onStart: () => void;
 };
 
+const labelClass = "mb-[7px] block text-xs text-[#9ca3af]";
+const inputClass =
+  "box-border w-full rounded-md border border-[#374151] bg-[#1f2937] px-3 py-2.5 text-sm text-[#f3f4f6] outline-none";
+
 export default function DemoJourney({
   source,
   destination,
@@ -18,173 +22,55 @@ export default function DemoJourney({
   onStart,
 }: DemoJourneyProps) {
   return (
-    <section
-      style={{
-        background: "#111827",
-        color: "#f3f4f6",
-        padding: "24px 28px 28px",
-        borderTop: "1px solid #374151",
-      }}
-    >
+    <section className="border-t border-[#374151] bg-[#111827] px-7 pb-7 pt-6 text-[#f3f4f6]">
       {/* Header */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "22px",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-          }}
-        >
-          <span
-            style={{
-              color: "#22d3ee",
-              fontSize: "20px",
-            }}
-          >
-            🚚
-          </span>
-
-          <span
-            style={{
-              fontSize: "17px",
-              fontWeight: 600,
-            }}
-          >
-            Demo journey
-          </span>
+      <div className="mb-[22px] flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <span className="text-xl text-[#22d3ee]">🚚</span>
+          <span className="text-[17px] font-semibold">Demo journey</span>
         </div>
 
-        <span
-          style={{
-            color: "#9ca3af",
-            fontSize: "13px",
-          }}
-        >
+        <span className="text-[13px] text-[#9ca3af]">
           Simulated GPS · straight-line journey · 60 seconds
         </span>
       </div>
 
       {/* Form */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr auto",
-          gap: "16px",
-          alignItems: "end",
-        }}
-      >
+      <div className="grid grid-cols-[1fr_1fr_1fr_auto] items-end gap-4">
         {/* Source */}
         <div>
-          <label
-            style={{
-              display: "block",
-              color: "#9ca3af",
-              fontSize: "12px",
-              marginBottom: "7px",
-            }}
-          >
-            Source
-          </label>
-
+          <label className={labelClass}>Source</label>
           <input
             value={source}
             onChange={(e) => onSourceChange(e.target.value)}
-            style={{
-              width: "100%",
-              boxSizing: "border-box",
-              padding: "10px 12px",
-              background: "#1f2937",
-              border: "1px solid #374151",
-              borderRadius: "6px",
-              color: "#f3f4f6",
-              fontSize: "14px",
-              outline: "none",
-            }}
+            className={inputClass}
           />
         </div>
 
         {/* Destination */}
         <div>
-          <label
-            style={{
-              display: "block",
-              color: "#9ca3af",
-              fontSize: "12px",
-              marginBottom: "7px",
-            }}
-          >
-            Destination
-          </label>
-
+          <label className={labelClass}>Destination</label>
           <input
             value={destination}
             onChange={(e) => onDestinationChange(e.target.value)}
-            style={{
-              width: "100%",
-              boxSizing: "border-box",
-              padding: "10px 12px",
-              background: "#1f2937",
-              border: "1px solid #374151",
-              borderRadius: "6px",
-              color: "#f3f4f6",
-              fontSize: "14px",
-              outline: "none",
-            }}
+            className={inputClass}
           />
         </div>
 
         {/* Truck ID */}
         <div>
-          <label
-            style={{
-              display: "block",
-              color: "#9ca3af",
-              fontSize: "12px",
-              marginBottom: "7px",
-            }}
-          >
-            Truck ID
-          </label>
-
+          <label className={labelClass}>Truck ID</label>
           <input
             value={truckId}
             onChange={(e) => onTruckIdChange(e.target.value)}
-            style={{
-              width: "100%",
-              boxSizing: "border-box",
-              padding: "10px 12px",
-              background: "#1f2937",
-              border: "1px solid #374151",
-              borderRadius: "6px",
-              color: "#f3f4f6",
-              fontSize: "14px",
-              outline: "none",
-            }}
+            className={inputClass}
           />
         </div>
 
         {/* Button */}
         <button
           onClick={onStart}
-          style={{
-            height: "39px",
-            padding: "0 20px",
-            background: "#06b6d4",
-            color: "#082f49",
-            border: "none",
-            borderRadius: "6px",
-            fontSize: "14px",
-            fontWeight: 700,
-            cursor: "pointer",
-            whiteSpace: "nowrap",
-          }}
+          className="h-[39px] cursor-pointer whitespace-nowrap rounded-md border-none bg-[#06b6d4] px-5 text-sm font-bold text-[#082f49]"
         >
           ▶ Start demo
         </button>

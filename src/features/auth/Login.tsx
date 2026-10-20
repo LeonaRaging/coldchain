@@ -1,7 +1,25 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { signIn } from "aws-amplify/auth";
-import "./Login.css";
+import {
+    authActions,
+    authButton,
+    authButtonSecondary,
+    authCard,
+    authCheckbox,
+    authCheckboxInput,
+    authError,
+    authField,
+    authFieldRow,
+    authForm,
+    authInput,
+    authLabel,
+    authLink,
+    authLinkRow,
+    authPage,
+    authSubtitle,
+    authTitle,
+} from "./authStyles";
 
 type LoginProps = {
     onSignedIn: () => void;
@@ -106,18 +124,19 @@ export default function Login({ onSignedIn }: LoginProps) {
     }
 
     return (
-        <main className="login-page">
-            <section className="login-card">
+        <main className={authPage}>
+            <section className={authCard}>
                 {step === "username" ? (
                     <>
-                        <h1>Sign in</h1>
-                        <p className="subtitle">Sign in to your account.</p>
+                        <h1 className={authTitle}>Sign in</h1>
+                        <p className={authSubtitle}>Sign in to your account.</p>
 
-                        <form onSubmit={handleNext}>
-                            <div className="field">
-                                <label htmlFor="username">Username</label>
+                        <form className={authForm} onSubmit={handleNext}>
+                            <div className={authField}>
+                                <label className={authLabel} htmlFor="username">Username</label>
                                 <input
                                     id="username"
+                                    className={authInput}
                                     type="text"
                                     placeholder="Enter username"
                                     value={username}
@@ -131,24 +150,25 @@ export default function Login({ onSignedIn }: LoginProps) {
                                 />
                             </div>
 
-                            {error && <p role="alert">{error}</p>}
+                            {error && <p className={authError} role="alert">{error}</p>}
 
-                            <button type="submit">Next</button>
+                            <button className={`${authButton} mt-1`} type="submit">Next</button>
                         </form>
 
-                        <p className="auth-link">
-                            New user? <Link to="/register">Create an account</Link>
+                        <p className={authLinkRow}>
+                            New user? <Link className={authLink} to="/register">Create an account</Link>
                         </p>
                     </>
                 ) : (
                     <>
-                        <h1>Enter your password</h1>
+                        <h1 className={authTitle}>Enter your password</h1>
 
-                        <form onSubmit={handleLogin}>
-                            <div className="field">
-                                <label htmlFor="password">Password</label>
+                        <form className={authForm} onSubmit={handleLogin}>
+                            <div className={authField}>
+                                <label className={authLabel} htmlFor="password">Password</label>
                                 <input
                                     id="password"
+                                    className={authInput}
                                     type={showPassword ? "text" : "password"}
                                     placeholder="Enter password"
                                     value={password}
@@ -158,9 +178,10 @@ export default function Login({ onSignedIn }: LoginProps) {
                                     required
                                 />
 
-                                <div className="field-row">
-                                    <label className="checkbox">
+                                <div className={authFieldRow}>
+                                    <label className={authCheckbox}>
                                         <input
+                                            className={authCheckboxInput}
                                             type="checkbox"
                                             checked={showPassword}
                                             onChange={(event) => setShowPassword(event.target.checked)}
@@ -168,27 +189,27 @@ export default function Login({ onSignedIn }: LoginProps) {
                                         Show password
                                     </label>
 
-                                    <Link to="/forgot-password" state={{ username }}>
+                                    <Link className={authLink} to="/forgot-password" state={{ username }}>
                                         Forgot your password?
                                     </Link>
                                 </div>
                             </div>
 
-                            {error && <p role="alert">{error}</p>}
+                            {error && <p className={authError} role="alert">{error}</p>}
 
                             {needsConfirm && (
-                                <button type="button" onClick={goToConfirm}>
+                                <button className={authButton} type="button" onClick={goToConfirm}>
                                     Confirm your account
                                 </button>
                             )}
 
-                            <div className="actions">
-                                <button type="submit" disabled={loading}>
+                            <div className={authActions}>
+                                <button className={authButton} type="submit" disabled={loading}>
                                     {loading ? "Signing in..." : "Continue"}
                                 </button>
                                 <button
+                                    className={authButtonSecondary}
                                     type="button"
-                                    className="secondary"
                                     onClick={handleBack}
                                     disabled={loading}
                                 >

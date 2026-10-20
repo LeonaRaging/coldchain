@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Map, Marker, NavigationControl, Popup, setWorkerUrl } from "maplibre-gl";
 import { fetchAuthSession, signOut } from "aws-amplify/auth";
 import "maplibre-gl/dist/maplibre-gl.css";
-import "./Dashboard.css";
 import { startDemo } from "./TruckDemo";
 import DemoJourney from "./DemoJourney";
 import QueryHistory from "../history/QueryHistory";
@@ -164,75 +163,38 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
   }, []);
 
   return (
-    <div className="dashboard-shell">
-      <div className="dashboard-layout">
-        <aside className="dashboard-history">
+    <div className="box-border min-h-screen bg-[#0b1120] p-6 text-left text-[#f3f4f6]">
+      <div className="grid grid-cols-[minmax(0,1fr)_1078px_minmax(0,1fr)] items-start gap-6 max-[1600px]:mx-auto max-[1600px]:flex max-[1600px]:max-w-[1078px] max-[1600px]:flex-col max-[1600px]:gap-[18px]">
+        <aside className="min-w-0 pt-[88px] max-[1600px]:order-2 max-[1600px]:w-full max-[1600px]:pt-0">
           <QueryHistory />
         </aside>
 
-        <main className="dashboard-main">
+        <main className="min-w-0 max-[1600px]:order-1 max-[1600px]:w-full">
           {/* Fleet Locations */}
           <section>
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginBottom: "12px" }}>
+        <div className="mb-3 flex justify-end gap-2.5">
           <button
             type="button"
             onClick={goToLogin}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "10px 20px",
-              background: "#06b6d4",
-              color: "#082f49",
-              border: "none",
-              borderRadius: "8px",
-              fontSize: "14px",
-              fontWeight: 700,
-              cursor: "pointer",
-              boxShadow: "0 2px 8px rgba(6, 182, 212, 0.35)",
-            }}
+            className="inline-flex cursor-pointer items-center gap-2 rounded-lg border-none bg-[#06b6d4] px-5 py-2.5 text-sm font-bold text-[#082f49] shadow-[0_2px_8px_rgba(6,182,212,0.35)]"
           >
             Sign out
           </button>
         </div>
-        <div
-          style={{
-            fontSize: "20px",
-            fontWeight: 700,
-            letterSpacing: "0.04em",
-            marginBottom: "14px",
-          }}
-        >
+        <div className="mb-3.5 text-xl font-bold tracking-[0.04em]">
           FLEET LOCATIONS
         </div>
 
-        <div
-          style={{
-            border: "1px solid #374151",
-            borderRadius: "8px",
-            overflow: "hidden",
-            background: "#111827",
-          }}
-        >
+        <div className="overflow-hidden rounded-lg border border-[#374151] bg-[#111827]">
           <div
             ref={containerRef}
-            style={{
-              width: "100%",
-              height: "420px",
-            }}
+            className="h-[420px] w-full"
           />
         </div>
       </section>
 
       {/* Demo Journey */}
-      <div
-        style={{
-          marginTop: "18px",
-          border: "1px solid #374151",
-          borderRadius: "8px",
-          overflow: "hidden",
-        }}
-      >
+      <div className="mt-[18px] overflow-hidden rounded-lg border border-[#374151]">
         <DemoJourney
           source={source}
           destination={destination}
