@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Map, Marker, NavigationControl, Popup, setWorkerUrl } from "maplibre-gl";
 import { fetchAuthSession, signOut } from "aws-amplify/auth";
 import "maplibre-gl/dist/maplibre-gl.css";
+import "./Dashboard.css";
 import { startDemo } from "./TruckDemo";
 import DemoJourney from "./DemoJourney";
 import QueryHistory from "../history/QueryHistory";

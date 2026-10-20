@@ -1,163 +1,9 @@
 import { useState } from "react";
-import type { CSSProperties, FormEvent } from "react";
+import type { FormEvent } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
 import { fetchHistory } from "./api";
 import type { HistoryRecord, HistoryResult } from "./api";
-
-const SECTION: CSSProperties = {
-  background: "#111827",
-  color: "#f3f4f6",
-  padding: "24px 28px 28px",
-  border: "1px solid #374151",
-  borderRadius: "8px",
-  textAlign: "left",
-};
-
-const TITLE_ROW: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "10px",
-};
-
-const TITLE_ICON: CSSProperties = {
-  color: "#22d3ee",
-  fontSize: "20px",
-};
-
-const HEADER: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: "12px",
-  marginBottom: "22px",
-  flexWrap: "wrap",
-};
-
-const HEADING: CSSProperties = {
-  fontSize: "17px",
-  fontWeight: 600,
-};
-
-const SUBTITLE: CSSProperties = {
-  color: "#9ca3af",
-  fontSize: "12px",
-};
-
-const FORM_GRID: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr) 84px auto",
-  gap: "10px",
-  alignItems: "end",
-};
-
-const LABEL: CSSProperties = {
-  display: "block",
-  color: "#9ca3af",
-  fontSize: "12px",
-  marginBottom: "7px",
-};
-
-const INPUT: CSSProperties = {
-  width: "100%",
-  boxSizing: "border-box",
-  padding: "10px 12px",
-  background: "#1f2937",
-  border: "1px solid #374151",
-  borderRadius: "6px",
-  color: "#f3f4f6",
-  fontSize: "14px",
-  outline: "none",
-  colorScheme: "dark",
-};
-
-const PRIMARY: CSSProperties = {
-  height: "39px",
-  padding: "0 20px",
-  background: "#06b6d4",
-  color: "#082f49",
-  border: "none",
-  borderRadius: "6px",
-  fontSize: "14px",
-  fontWeight: 700,
-  cursor: "pointer",
-  whiteSpace: "nowrap",
-};
-
-const ERROR_BOX: CSSProperties = {
-  marginTop: "16px",
-  padding: "10px 12px",
-  borderRadius: "6px",
-  background: "rgba(239, 68, 68, 0.12)",
-  border: "1px solid rgba(239, 68, 68, 0.4)",
-  color: "#f87171",
-  fontSize: "13px",
-};
-
-const RESULTS_HEAD: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: "12px",
-  margin: "24px 0 12px",
-  flexWrap: "wrap",
-};
-
-const MUTED: CSSProperties = {
-  color: "#9ca3af",
-  fontSize: "13px",
-};
-
-const MONO: CSSProperties = {
-  fontFamily: "ui-monospace, Consolas, monospace",
-  fontSize: "12px",
-  color: "#6b7280",
-};
-
-const LIST: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "8px",
-};
-
-const POINT: CSSProperties = {
-  background: "#0f172a",
-  border: "1px solid #1f2937",
-  borderRadius: "6px",
-  padding: "10px 12px",
-};
-
-const POINT_TOP: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "baseline",
-  gap: "8px",
-  flexWrap: "wrap",
-};
-
-const POINT_TIME: CSSProperties = {
-  fontFamily: "ui-monospace, Consolas, monospace",
-  fontSize: "12px",
-  color: "#d1d5db",
-};
-
-const POINT_TEMP: CSSProperties = {
-  fontSize: "13px",
-  fontWeight: 700,
-  color: "#22d3ee",
-};
-
-const POINT_TEMP_HOT: CSSProperties = {
-  ...POINT_TEMP,
-  color: "#f87171",
-};
-
-const POINT_COORDS: CSSProperties = {
-  marginTop: "4px",
-  fontFamily: "ui-monospace, Consolas, monospace",
-  fontSize: "12px",
-  color: "#9ca3af",
-  wordBreak: "break-word",
-};
+import "./QueryHistory.css";
 
 function formatTimestamp(record: HistoryRecord): string {
   const value = record.timestamp ?? record.event_time;
@@ -257,33 +103,32 @@ export default function QueryHistory() {
     : [];
 
   return (
-    <section style={SECTION}>
-      <div style={HEADER}>
-        <div>
-          <div style={TITLE_ROW}>
-            <span style={TITLE_ICON}>🕒</span>
-            <span style={HEADING}>Query history</span>
-          </div>
-          <div style={SUBTITLE}>From the data lake · newest first</div>
+    <section className="history-panel">
+      <div className="history-header">
+        <div className="history-title-row">
+          <span className="history-title-icon">🕒</span>
+          <span className="history-title">Query history</span>
         </div>
 
-        <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+        <div className="history-truck">
           {result ? (
-            <div style={MONO}>Truck {result.truckId}</div>
+            <div className="history-mono">Truck {result.truckId}</div>
           ) : (
-            <div style={MUTED}>No query yet</div>
+            <div className="history-muted">No query yet</div>
           )}
         </div>
+
+        <div className="history-subtitle">From the data lake · newest first</div>
       </div>
 
-      <form style={FORM_GRID} onSubmit={handleSubmit}>
+      <form className="history-form" onSubmit={handleSubmit}>
         <div>
-          <label style={LABEL} htmlFor="history-truck">
+          <label className="history-label" htmlFor="history-truck">
             Truck ID
           </label>
           <input
             id="history-truck"
-            style={INPUT}
+            className="history-input"
             value={truckId}
             onChange={(event) => setTruckId(event.target.value)}
             placeholder="e.g. DEMO-001"
@@ -291,12 +136,12 @@ export default function QueryHistory() {
         </div>
 
         <div>
-          <label style={LABEL} htmlFor="history-limit">
+          <label className="history-label" htmlFor="history-limit">
             Limit
           </label>
           <input
             id="history-limit"
-            style={INPUT}
+            className="history-input"
             type="number"
             min={1}
             step={1}
@@ -306,43 +151,49 @@ export default function QueryHistory() {
           />
         </div>
 
-        <button type="submit" style={PRIMARY} disabled={loading}>
+        <button type="submit" className="history-submit" disabled={loading}>
           {loading ? "Querying..." : "Query"}
         </button>
       </form>
 
-      {error && <div style={ERROR_BOX}>{error}</div>}
+      {error && <div className="history-error">{error}</div>}
 
-      <div style={RESULTS_HEAD}>
-        <div style={{ fontWeight: 700 }}>Route points</div>
+      <div className="history-results-head">
+        <div className="history-results-title">Route points</div>
         {result && (
-          <div style={MUTED}>
+          <div className="history-muted">
             {shownRecords.length} of {result.count}
           </div>
         )}
       </div>
 
       {loading ? (
-        <p style={MUTED}>Running Athena query…</p>
+        <p className="history-muted">Running Athena query…</p>
       ) : result && result.records.length > 0 ? (
-        <div style={LIST}>
+        <div className="history-list">
           {shownRecords.map((record, index) => {
             const temperature = formatTemperature(record);
             return (
-              <div key={index} style={POINT}>
-                <div style={POINT_TOP}>
-                  <span style={POINT_TIME}>{formatTimestamp(record)}</span>
-                  <span style={temperature.hot ? POINT_TEMP_HOT : POINT_TEMP}>
+              <div key={index} className="history-point">
+                <div className="history-point-top">
+                  <span className="history-point-time">{formatTimestamp(record)}</span>
+                  <span
+                    className={
+                      temperature.hot
+                        ? "history-point-temp history-point-temp--hot"
+                        : "history-point-temp"
+                    }
+                  >
                     {temperature.text}
                   </span>
                 </div>
-                <div style={POINT_COORDS}>{formatCoords(record)}</div>
+                <div className="history-point-coords">{formatCoords(record)}</div>
               </div>
             );
           })}
         </div>
       ) : (
-        <p style={MUTED}>
+        <p className="history-muted">
           {result
             ? `No events found for truck ${result.truckId}.`
             : "Enter a truck ID, then run a query."}
