@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Map, Marker, NavigationControl, Popup, setWorkerUrl } from "maplibre-gl";
 import { fetchAuthSession, signOut } from "aws-amplify/auth";
 import "maplibre-gl/dist/maplibre-gl.css";
+import "./Dashboard.css";
 import { startDemo } from "./TruckDemo";
 import DemoJourney from "./DemoJourney";
+import QueryHistory from "../history/QueryHistory";
 
 const apiKey = import.meta.env.VITE_LOCATION_API_KEY;
 const region = import.meta.env.VITE_AWS_REGION;
@@ -162,18 +164,16 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
   }, []);
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#0b1120",
-        color: "#f3f4f6",
-        padding: "24px",
-        boxSizing: "border-box",
-      }}
-    >
-      {/* Fleet Locations */}
-      <section>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "12px" }}>
+    <div className="dashboard-shell">
+      <div className="dashboard-layout">
+        <aside className="dashboard-history">
+          <QueryHistory />
+        </aside>
+
+        <main className="dashboard-main">
+          {/* Fleet Locations */}
+          <section>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginBottom: "12px" }}>
           <button
             type="button"
             onClick={goToLogin}
@@ -251,6 +251,8 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
             });
           }}
         />
+      </div>
+        </main>
       </div>
     </div>
   );
