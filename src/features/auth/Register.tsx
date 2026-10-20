@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { signUp, confirmSignUp } from "aws-amplify/auth";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { signUp, confirmSignUp, resendSignUpCode } from "aws-amplify/auth";
 import "./Login.css";
 
 
@@ -17,6 +17,8 @@ const PASSWORD_RULES = [
 
 type AuthError = { name?: string; message?: string };
 
+
+type IncomingState = { username?: string; needsConfirmation?: boolean } | null;
 
 function getSignUpError(err: unknown): string {
     const e = err as AuthError;
@@ -45,7 +47,7 @@ function getConfirmError(err: unknown): string {
         case "CodeMismatchException":
             return "Wrong confirmation code. Check your email and try again.";
         case "ExpiredCodeException":
-            return "This code has expired. Sign up again to get a new code.";
+            return "This code has expired. Use “Resend code” to get a new one.";
         case "LimitExceededException":
         case "TooManyRequestsException":
             return "Too many attempts. Wait a few minutes and try again.";
@@ -56,24 +58,34 @@ function getConfirmError(err: unknown): string {
 
 export default function Register() {
     const navigate = useNavigate();
+    const location = useLocation();
+    const incoming = location.state as IncomingState;
 
     const [email, setEmail] = useState("");
-    const [username, setUsername] = useState("");
+    const [username, setUsername] = useState(incoming?.username ?? "");
     const [password, setPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [confirmationCode, setConfirmationCode] = useState("");
-    const [needsConfirmation, setNeedsConfirmation] = useState(false);
-    const [message, setMessage] = useState("");
+    const [needsConfirmation, setNeedsConfirmation] = useState(
+        incoming?.needsConfirmation ?? false
+    );
+    const [message, setMessage] = useState(
+        incoming?.needsConfirmation
+            ? "Enter the code we emailed you, or choose Resend code."
+            : ""
+    );
+
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+
+
 
     async function handleSignUp(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
         setError("");
         setMessage("");
 
-  
         const failedRules = PASSWORD_RULES.filter((rule) => !rule.test(password));
         if (failedRules.length > 0) {
             setError(
@@ -130,6 +142,18 @@ export default function Register() {
         }
     }
 
+    async function handleResend() {
+        setError("");
+
+        try {
+            await resendSignUpCode({ username });
+            setMessage("A new code has been sent to your email.");
+        } catch (err) {
+            console.error(err);
+            setError(getConfirmError(err));
+        }
+    }
+
     return (
         <main className="login-page">
             <section className="login-card">
@@ -148,15 +172,26 @@ export default function Register() {
                                     value={confirmationCode}
                                     onChange={(event) => setConfirmationCode(event.target.value)}
                                     autoComplete="one-time-code"
+                                    autoFocus
                                     required
                                 />
                             </div>
 
                             {error && <p role="alert">{error}</p>}
 
-                            <button type="submit" disabled={loading}>
-                                {loading ? "Confirming..." : "Confirm account"}
-                            </button>
+                            <div className="actions">
+                                <button type="submit" disabled={loading}>
+                                    {loading ? "Confirming..." : "Confirm account"}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="secondary"
+                                    onClick={handleResend}
+                                    disabled={loading}
+                                >
+                                    Resend code
+                                </button>
+                            </div>
                         </form>
                     </>
                 ) : (
@@ -172,7 +207,9 @@ export default function Register() {
                                     type="text"
                                     placeholder="Enter username"
                                     value={username}
-                                    onChange={(event) => setUsername(event.target.value)}
+                                    onChange={(event) => {
+                                        setUsername(event.target.value);
+                                    }}
                                     autoComplete="username"
                                     required
                                 />
@@ -241,9 +278,11 @@ export default function Register() {
 
                             {error && <p role="alert">{error}</p>}
 
-                            <button type="submit" disabled={loading}>
-                                {loading ? "Creating account..." : "Sign up"}
-                            </button>
+                            <div className="actions">
+                                <button type="submit" disabled={loading}>
+                                    {loading ? "Creating account..." : "Sign up"}
+                                </button>
+                            </div>
                         </form>
                     </>
                 )}

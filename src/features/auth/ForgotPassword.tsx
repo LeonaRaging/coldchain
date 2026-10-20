@@ -10,6 +10,51 @@ function describeError(err: unknown, fallback: string): string {
     return `${e.name ?? "Error"}: ${e.message ?? fallback}`;
 }
 
+function getSendCodeError(err: unknown): string {
+    const e = err as AuthError;
+
+    switch (e.name) {
+        case "InvalidParameterException":
+            return "We cannot send a reset code because this account's email is not verified. Confirm your email first.";
+        case "UserNotFoundException":
+            return "Username does not exist. Check the username and try again.";
+        case "LimitExceededException":
+        case "TooManyRequestsException":
+            return "Too many attempts. Wait a few minutes and try again.";
+        case "NetworkError":
+            return "Cannot reach the server. Check your internet connection.";
+        default:
+            return describeError(err, "Could not send the code.");
+    }
+}
+
+function getResetError(err: unknown): string {
+    const e = err as AuthError;
+
+    switch (e.name) {
+        case "CodeMismatchException":
+            return "Wrong confirmation code. Check your email and try again.";
+        case "ExpiredCodeException":
+            return "This code has expired. Request a new code.";
+        case "InvalidPasswordException":
+            return `Password does not meet the requirements. ${e.message ?? ""}`;
+        case "UserNotFoundException":
+            return "Username does not exist.";
+        case "LimitExceededException":
+        case "TooManyRequestsException":
+            return "Too many attempts. Wait a few minutes and try again.";
+        default:
+            return describeError(err, "Could not reset the password.");
+    }
+}
+
+const NO_CONFIRM_BUTTON = [
+    "UserNotFoundException",
+    "LimitExceededException",
+    "TooManyRequestsException",
+    "NetworkError",
+];
+
 export default function ForgotPassword() {
     const navigate = useNavigate();
     const location = useLocation();
@@ -20,20 +65,47 @@ export default function ForgotPassword() {
     const [code, setCode] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [codeSent, setCodeSent] = useState(false);
+    const [showConfirmEmail, setShowConfirmEmail] = useState(false);
     const [error, setError] = useState("");
+    const [info, setInfo] = useState("");
     const [loading, setLoading] = useState(false);
+
+    function goToConfirmEmail() {
+        navigate("/register", { state: { username, needsConfirmation: true } });
+    }
 
     async function handleSendCode(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
         setError("");
+        setInfo("");
+        setShowConfirmEmail(false);
         setLoading(true);
 
         try {
-            await resetPassword({ username });
+            await resetPassword({ username: username.trim() });
+            setInfo("We sent a code to your email.");
             setCodeSent(true);
         } catch (err) {
             console.error(err);
-            setError(describeError(err, "Could not send the code."));
+            const e = err as AuthError;
+            setError(getSendCodeError(err));
+            setShowConfirmEmail(!NO_CONFIRM_BUTTON.includes(e.name ?? ""));
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function handleResend() {
+        setError("");
+        setInfo("");
+        setLoading(true);
+
+        try {
+            await resetPassword({ username: username.trim() });
+            setInfo("A new code has been sent to your email.");
+        } catch (err) {
+            console.error(err);
+            setError(getSendCodeError(err));
         } finally {
             setLoading(false);
         }
@@ -46,14 +118,14 @@ export default function ForgotPassword() {
 
         try {
             await confirmResetPassword({
-                username,
-                confirmationCode: code,
+                username: username.trim(),
+                confirmationCode: code.trim(),
                 newPassword,
             });
             navigate("/login");
         } catch (err) {
             console.error(err);
-            setError(describeError(err, "Could not reset the password."));
+            setError(getResetError(err));
         } finally {
             setLoading(false);
         }
@@ -65,7 +137,9 @@ export default function ForgotPassword() {
                 {codeSent ? (
                     <>
                         <h1>Reset your password</h1>
-                        <p className="subtitle">Enter the code we sent to your email.</p>
+                        <p className="subtitle">
+                            {info || "Enter the code we sent to your email."}
+                        </p>
 
                         <form onSubmit={handleReset}>
                             <div className="field">
@@ -96,9 +170,19 @@ export default function ForgotPassword() {
 
                             {error && <p role="alert">{error}</p>}
 
-                            <button type="submit" disabled={loading}>
-                                {loading ? "Saving..." : "Reset password"}
-                            </button>
+                            <div className="actions">
+                                <button type="submit" disabled={loading}>
+                                    {loading ? "Saving..." : "Reset password"}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="secondary"
+                                    onClick={handleResend}
+                                    disabled={loading}
+                                >
+                                    Resend code
+                                </button>
+                            </div>
                         </form>
                     </>
                 ) : (
@@ -114,7 +198,11 @@ export default function ForgotPassword() {
                                     type="text"
                                     placeholder="Enter username"
                                     value={username}
-                                    onChange={(event) => setUsername(event.target.value)}
+                                    onChange={(event) => {
+                                        setUsername(event.target.value);
+                                        setError("");
+                                        setShowConfirmEmail(false);
+                                    }}
                                     autoComplete="username"
                                     required
                                 />
@@ -122,9 +210,22 @@ export default function ForgotPassword() {
 
                             {error && <p role="alert">{error}</p>}
 
-                            <button type="submit" disabled={loading}>
-                                {loading ? "Sending..." : "Send code"}
-                            </button>
+                            <div className="actions">
+                                <button type="submit" disabled={loading}>
+                                    {loading ? "Sending..." : "Send code"}
+                                </button>
+
+                                {showConfirmEmail && (
+                                    <button
+                                        type="button"
+                                        className="secondary"
+                                        onClick={goToConfirmEmail}
+                                        disabled={loading}
+                                    >
+                                        Confirm your email
+                                    </button>
+                                )}
+                            </div>
                         </form>
                     </>
                 )}
