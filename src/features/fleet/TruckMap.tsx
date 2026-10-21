@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Map, Marker, NavigationControl, Popup, setWorkerUrl } from "maplibre-gl";
 import { fetchAuthSession, signOut } from "aws-amplify/auth";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { startDemo } from "./TruckDemo";
+import { startDemo, stopDemo } from "./TruckDemo";
 import DemoJourney from "./DemoJourney";
 import QueryHistory from "../history/QueryHistory";
+import { SearchPlace, type PlaceResult } from "./location";
 
 const apiKey = import.meta.env.VITE_LOCATION_API_KEY;
 const region = import.meta.env.VITE_AWS_REGION;
@@ -32,7 +33,17 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
   const [destination, setDestination] = useState("Ho Chi Minh City");
   const [truckId, setTruckId] = useState("DEMO-001");
 
+  const [startResults, setStartResults] = useState<PlaceResult[]>([]);
+  const [endResults, setEndResults] = useState<PlaceResult[]>([]);
+
+  const [selectedSource, setSelectedSource] = useState<PlaceResult>();
+  const [selectedDestination, setSelectedDestination] = useState<PlaceResult>();
+
+  const [mapReady, setMapReady] = useState(false);
+
   async function goToLogin() {
+    stopDemo();
+
     try {
       await signOut();
     } catch (error) {
@@ -52,9 +63,9 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
     });
 
     mapRef.current = map;
+    setMapReady(true);
 
     map.addControl(new NavigationControl(), "top-right");
-
 
     const markers = new globalThis.Map<string, Marker>();
     let cancelled = false;
@@ -86,7 +97,6 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
         }
 
         const trucks: Truck[] = await response.json();
-
         if (cancelled) return;
 
         const currentTruckIds = new Set<string>();
@@ -151,6 +161,7 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
     return () => {
       cancelled = true;
 
+      stopDemo();
       clearInterval(intervalId);
 
       for (const marker of markers.values()) {
@@ -161,6 +172,44 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
       map.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+
+    const map = mapRef.current;
+    const center = map.getCenter();
+
+    const mapCenter: [number, number] = [
+      center.lng,
+      center.lat,
+    ];
+
+    const timer = setTimeout(() => {
+      async function searchPlaces() {
+        try {
+          const [start, end] = await Promise.all([
+            source.trim()
+              ? SearchPlace(source, mapCenter)
+              : Promise.resolve([]),
+            destination.trim()
+              ? SearchPlace(destination, mapCenter)
+              : Promise.resolve([]),
+          ]);
+
+          setStartResults(start);
+          setEndResults(end);
+        } catch (error) {
+          console.error("Could not load places:", error);
+        }
+      }
+
+      void searchPlaces();
+    }, 5000);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [source, destination, mapReady]);
 
   return (
     <div className="box-border min-h-screen bg-slate-950 p-6 text-left text-gray-100">
@@ -194,19 +243,51 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
       </section>
 
       {/* Demo Journey */}
-      <div className="mt-5 overflow-hidden rounded-lg border border-gray-700">
+      <div className="mt-5 overflow-visible rounded-lg border border-gray-700">
         <DemoJourney
           source={source}
           destination={destination}
           truckId={truckId}
-          onSourceChange={setSource}
-          onDestinationChange={setDestination}
+          sourceResults={startResults}
+          destinationResults={endResults}
+          selectedSource={selectedSource}
+          selectedDestination={selectedDestination}
+          onSourceSelect={(place) => {
+            setSource(place.Title);
+            setSelectedSource(place);
+          }}
+          onDestinationSelect={(place) => {
+            setDestination(place.Title);
+            setSelectedDestination(place);
+          }}
+          onSourceChange={(value) => {
+            setSource(value);
+            setSelectedSource(undefined);
+          }}
+          onDestinationChange={(value) => {
+            setDestination(value);
+            setSelectedDestination(undefined);
+          }}
           onTruckIdChange={setTruckId}
           onStart={() => {
+            if (!selectedSource || !selectedDestination) {
+              console.log("Please select both source and destination");
+              return;
+            }
+
+            const start = selectedSource.Position;
+            const end = selectedDestination.Position;
+
+            const map = mapRef.current;
+
+            if (!map) {
+              console.error("Map is not ready");
+              return;
+            }
+
             startDemo(
-              mapRef.current!,
-              source,
-              destination,
+              start,
+              end,
               truckId
             ).catch((error) => {
               console.error("ROUTE ERROR:", error);
