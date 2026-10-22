@@ -2,6 +2,7 @@ import { TruckPath } from "./location";
 import { fetchAuthSession } from "aws-amplify/auth";
 
 const TruckCreateUrl = import.meta.env.VITE_TRUCKS_CREATE_URL;
+
 let activeDemo:
   | {
       timer?: ReturnType<typeof setTimeout>;
@@ -44,7 +45,7 @@ export async function startDemo(
       throw new Error("No route returned");
     }
 
-    const lineString = lineStringPath;
+    const lineString = getSamplePath(lineStringPath);
     const session = await fetchAuthSession();
     const idToken = session.tokens?.idToken?.toString();
 
@@ -85,7 +86,7 @@ export async function startDemo(
       }
 
       if (time < lineString.length) {
-        demo.timer = setTimeout(sendTruckData, 5000);
+        demo.timer = setTimeout(sendTruckData, 3000);
       } else if (activeDemo === demo) {
         activeDemo = undefined;
       }
@@ -100,4 +101,26 @@ export async function startDemo(
     }
     throw error;
   }
+}
+
+function getSamplePath(
+  path: [number, number][],
+  numPositions: number = 20
+): [number, number][] {
+  if (path.length <= numPositions) {
+    return path;
+  }
+  const sampledPath: [number, number][] = [];
+  const step = (path.length - 1) / (numPositions - 1);
+
+  for (let i = 0; i < numPositions; i++) {
+    const index = Math.floor(i * step);
+    sampledPath.push(path[index]);
+  }
+
+  if (sampledPath[sampledPath.length - 1] !== path[path.length - 1]) {
+    sampledPath.push(path[path.length - 1]);
+  }
+
+  return sampledPath;
 }

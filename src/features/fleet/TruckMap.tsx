@@ -71,7 +71,7 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
     let cancelled = false;
     const intervalId = setInterval(() => {
       void loadTrucks();
-    }, 5000);
+    }, 3000);
     let requestInProgress = false;
 
     async function loadTrucks() {
@@ -175,41 +175,56 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
-
-    const map = mapRef.current;
-    const center = map.getCenter();
-
+    if (selectedSource && selectedSource.Title === source) {
+      return;
+    }
+    if (!source.trim()) {
+      setStartResults([]);
+      return;
+    }
+    const center = mapRef.current.getCenter();
     const mapCenter: [number, number] = [
       center.lng,
       center.lat,
     ];
-
-    const timer = setTimeout(() => {
-      async function searchPlaces() {
-        try {
-          const [start, end] = await Promise.all([
-            source.trim()
-              ? SearchPlace(source, mapCenter)
-              : Promise.resolve([]),
-            destination.trim()
-              ? SearchPlace(destination, mapCenter)
-              : Promise.resolve([]),
-          ]);
-
-          setStartResults(start);
-          setEndResults(end);
-        } catch (error) {
-          console.error("Could not load places:", error);
-        }
+    const timer = setTimeout(async () => {
+      try {
+        const results = await SearchPlace(source.trim(), mapCenter);
+        setStartResults(results);
+      } catch (error) {
+        console.error("Could not load source places:", error);
       }
+    }, 300);
 
-      void searchPlaces();
-    }, 5000);
+    return () => clearTimeout(timer);
+  }, [source, selectedSource, mapReady]);
 
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [source, destination, mapReady]);
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    if (selectedDestination && selectedDestination.Title === destination) {
+      return;
+    }
+    if (!destination.trim()) {
+      setEndResults([]);
+      return;
+    }
+
+    const center = mapRef.current.getCenter();
+    const mapCenter: [number, number] = [
+      center.lng,
+      center.lat,
+    ];
+    const timer = setTimeout(async () => {
+      try {
+        const results = await SearchPlace(destination.trim(), mapCenter);
+        setEndResults(results);
+      } catch (error) {
+        console.error("Could not load destination places:", error);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [destination, selectedDestination, mapReady]);
 
   return (
     <div className="box-border min-h-screen bg-slate-950 p-6 text-left text-gray-100">
@@ -221,80 +236,80 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
         <main className="min-w-0 max-2xl:order-1 max-2xl:w-full">
           {/* Fleet Locations */}
           <section>
-        <div className="mb-3 flex justify-end gap-2.5">
-          <button
-            type="button"
-            onClick={goToLogin}
-            className="inline-flex cursor-pointer items-center gap-2 rounded-lg border-none bg-cyan-500 px-5 py-2.5 text-sm font-bold text-cyan-950 shadow-lg shadow-cyan-500/30"
-          >
-            Sign out
-          </button>
-        </div>
-        <div className="mb-3.5 text-xl font-bold tracking-wide">
-          FLEET LOCATIONS
-        </div>
+            <div className="mb-3 flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={goToLogin}
+                className="inline-flex cursor-pointer items-center gap-2 rounded-lg border-none bg-cyan-500 px-5 py-2.5 text-sm font-bold text-cyan-950 shadow-lg shadow-cyan-500/30"
+              >
+                Sign out
+              </button>
+            </div>
+            <div className="mb-3.5 text-xl font-bold tracking-wide">
+              FLEET LOCATIONS
+            </div>
 
-        <div className="overflow-hidden rounded-lg border border-gray-700 bg-gray-900">
-          <div
-            ref={containerRef}
-            className="h-105 w-full"
-          />
-        </div>
-      </section>
+            <div className="overflow-hidden rounded-lg border border-gray-700 bg-gray-900">
+              <div
+                ref={containerRef}
+                className="h-105 w-full"
+              />
+            </div>
+          </section>
 
-      {/* Demo Journey */}
-      <div className="mt-5 overflow-visible rounded-lg border border-gray-700">
-        <DemoJourney
-          source={source}
-          destination={destination}
-          truckId={truckId}
-          sourceResults={startResults}
-          destinationResults={endResults}
-          selectedSource={selectedSource}
-          selectedDestination={selectedDestination}
-          onSourceSelect={(place) => {
-            setSource(place.Title);
-            setSelectedSource(place);
-          }}
-          onDestinationSelect={(place) => {
-            setDestination(place.Title);
-            setSelectedDestination(place);
-          }}
-          onSourceChange={(value) => {
-            setSource(value);
-            setSelectedSource(undefined);
-          }}
-          onDestinationChange={(value) => {
-            setDestination(value);
-            setSelectedDestination(undefined);
-          }}
-          onTruckIdChange={setTruckId}
-          onStart={() => {
-            if (!selectedSource || !selectedDestination) {
-              console.log("Please select both source and destination");
-              return;
-            }
+          {/* Demo Journey */}
+          <div className="mt-5 overflow-visible rounded-lg border border-gray-700">
+            <DemoJourney
+              source={source}
+              destination={destination}
+              truckId={truckId}
+              sourceResults={startResults}
+              destinationResults={endResults}
+              selectedSource={selectedSource}
+              selectedDestination={selectedDestination}
+              onSourceSelect={(place) => {
+                setSource(place.Title);
+                setSelectedSource(place);
+              }}
+              onDestinationSelect={(place) => {
+                setDestination(place.Title);
+                setSelectedDestination(place);
+              }}
+              onSourceChange={(value) => {
+                setSource(value);
+                setSelectedSource(undefined);
+              }}
+              onDestinationChange={(value) => {
+                setDestination(value);
+                setSelectedDestination(undefined);
+              }}
+              onTruckIdChange={setTruckId}
+              onStart={() => {
+                if (!selectedSource || !selectedDestination) {
+                  console.log("Please select both source and destination");
+                  return;
+                }
 
-            const start = selectedSource.Position;
-            const end = selectedDestination.Position;
+                const start = selectedSource.Position;
+                const end = selectedDestination.Position;
 
-            const map = mapRef.current;
+                const map = mapRef.current;
 
-            if (!map) {
-              console.error("Map is not ready");
-              return;
-            }
+                if (!map) {
+                  console.error("Map is not ready");
+                  return;
+                }
 
-            startDemo(
-              start,
-              end,
-              truckId
-            ).catch((error) => {
-              console.error("ROUTE ERROR:", error);
-            });
-          }}
-        />
-      </div>
+                startDemo(
+                  start,
+                  end,
+                  truckId
+                ).catch((error) => {
+                  console.error("ROUTE ERROR:", error);
+                });
+              }}
+            />
+          </div>
         </main>
       </div>
     </div>

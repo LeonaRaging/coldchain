@@ -48,12 +48,9 @@ export async function SearchPlace(
   const client = new GeoPlacesClient(authHelper.getClientConfig());
 
   const command = new SearchTextCommand({
-    QueryText: `${text}, Vietnam`,
+    QueryText: text,
     BiasPosition: biasPosition,
     MaxResults: 7,
-    Filter: {
-      IncludeCountries: ["VNM"],
-    },
   });
 
   const response = await client.send(command);
