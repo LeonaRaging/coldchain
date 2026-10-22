@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { signIn } from "aws-amplify/auth";
+import AuthBrand from "./AuthBrand";
 
 type LoginProps = {
     onSignedIn: () => void;
@@ -105,19 +106,20 @@ export default function Login({ onSignedIn }: LoginProps) {
     }
 
     return (
-        <main className="fixed inset-0 z-10 flex overflow-y-auto bg-gray-100 p-5 text-left font-sans text-sm leading-snug text-gray-900">
-            <section className="m-auto box-border flex w-full max-w-sm flex-col gap-2 rounded-lg border border-gray-300 bg-white p-6">
+        <main className="fixed inset-0 z-10 flex overflow-y-auto bg-motive-surface p-5 text-left font-sans text-sm leading-snug text-motive-ink">
+            <section className="m-auto flex w-full max-w-sm flex-col gap-2 rounded-xl border border-motive-line bg-white p-7 shadow-sm">
+                <AuthBrand />
                 {step === "username" ? (
                     <>
-                        <h1 className="m-0 mb-1 text-left text-2xl font-bold leading-tight tracking-normal text-gray-900">Sign in</h1>
-                        <p className="m-0 text-sm text-gray-900">Sign in to your account.</p>
+                        <h1 className="m-0 mb-1 text-left text-2xl font-semibold leading-tight tracking-tight text-motive-ink">Sign in</h1>
+                        <p className="m-0 text-sm text-motive-muted">Sign in to your account.</p>
 
                         <form className="mt-2 flex flex-col gap-4" onSubmit={handleNext}>
                             <div className="flex flex-col gap-1">
-                                <label className="text-sm font-bold text-gray-900" htmlFor="username">Username</label>
+                                <label className="text-sm font-medium text-motive-ink" htmlFor="username">Username</label>
                                 <input
                                     id="username"
-                                    className="box-border h-8 w-full rounded-md border border-gray-400 bg-white px-3 text-sm text-gray-900 outline-none placeholder:italic placeholder:text-gray-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                                    className="h-10 w-full rounded-md border border-motive-line bg-white px-3 text-sm text-motive-ink outline-none transition-shadow placeholder:text-gray-400 focus:border-motive-blue focus:ring-2 focus:ring-motive-blue/15"
                                     type="text"
                                     placeholder="Enter username"
                                     value={username}
@@ -133,23 +135,23 @@ export default function Login({ onSignedIn }: LoginProps) {
 
                             {error && <p className="m-0 text-sm text-red-600" role="alert">{error}</p>}
 
-                            <button className="mt-1 h-8 cursor-pointer rounded border-none bg-blue-600 text-sm font-bold text-white transition-colors enabled:hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60" type="submit">Next</button>
+                            <button className="mt-1 h-10 cursor-pointer rounded-md border-none bg-motive-blue text-sm font-semibold text-white transition-colors enabled:hover:bg-motive-blue-dark disabled:cursor-not-allowed disabled:opacity-60" type="submit">Next</button>
                         </form>
 
-                        <p className="m-0 mt-1 text-center text-sm text-gray-900">
-                            New user? <Link className="text-blue-600 no-underline hover:underline" to="/register">Create an account</Link>
+                        <p className="m-0 mt-1 text-center text-sm text-motive-muted">
+                            New user? <Link className="text-motive-blue no-underline hover:underline" to="/register">Create an account</Link>
                         </p>
                     </>
                 ) : (
                     <>
-                        <h1 className="m-0 mb-1 text-left text-2xl font-bold leading-tight tracking-normal text-gray-900">Enter your password</h1>
+                        <h1 className="m-0 mb-1 text-left text-2xl font-semibold leading-tight tracking-tight text-motive-ink">Enter your password</h1>
 
                         <form className="mt-2 flex flex-col gap-4" onSubmit={handleLogin}>
                             <div className="flex flex-col gap-1">
-                                <label className="text-sm font-bold text-gray-900" htmlFor="password">Password</label>
+                                <label className="text-sm font-medium text-motive-ink" htmlFor="password">Password</label>
                                 <input
                                     id="password"
-                                    className="box-border h-8 w-full rounded-md border border-gray-400 bg-white px-3 text-sm text-gray-900 outline-none placeholder:italic placeholder:text-gray-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                                    className="h-10 w-full rounded-md border border-motive-line bg-white px-3 text-sm text-motive-ink outline-none transition-shadow placeholder:text-gray-400 focus:border-motive-blue focus:ring-2 focus:ring-motive-blue/15"
                                     type={showPassword ? "text" : "password"}
                                     placeholder="Enter password"
                                     value={password}
@@ -162,7 +164,7 @@ export default function Login({ onSignedIn }: LoginProps) {
                                 <div className="mt-0.5 flex items-center justify-between gap-3">
                                     <label className="flex cursor-pointer items-center gap-2 text-sm font-normal">
                                         <input
-                                            className="m-0 h-4 w-4 p-0 accent-blue-600"
+                                            className="m-0 h-4 w-4 rounded p-0 accent-motive-blue"
                                             type="checkbox"
                                             checked={showPassword}
                                             onChange={(event) => setShowPassword(event.target.checked)}
@@ -170,7 +172,7 @@ export default function Login({ onSignedIn }: LoginProps) {
                                         Show password
                                     </label>
 
-                                    <Link className="text-blue-600 no-underline hover:underline" to="/forgot-password" state={{ username }}>
+                                    <Link className="text-motive-blue no-underline hover:underline" to="/forgot-password" state={{ username }}>
                                         Forgot your password?
                                     </Link>
                                 </div>
@@ -179,17 +181,17 @@ export default function Login({ onSignedIn }: LoginProps) {
                             {error && <p className="m-0 text-sm text-red-600" role="alert">{error}</p>}
 
                             {needsConfirm && (
-                                <button className="h-8 cursor-pointer rounded border-none bg-blue-600 text-sm font-bold text-white transition-colors enabled:hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={goToConfirm}>
+                                <button className="h-10 cursor-pointer rounded-md border-none bg-motive-blue text-sm font-semibold text-white transition-colors enabled:hover:bg-motive-blue-dark disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={goToConfirm}>
                                     Confirm your account
                                 </button>
                             )}
 
                             <div className="flex flex-col gap-2">
-                                <button className="h-8 cursor-pointer rounded border-none bg-blue-600 text-sm font-bold text-white transition-colors enabled:hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60" type="submit" disabled={loading}>
+                                <button className="h-10 cursor-pointer rounded-md border-none bg-motive-blue text-sm font-semibold text-white transition-colors enabled:hover:bg-motive-blue-dark disabled:cursor-not-allowed disabled:opacity-60" type="submit" disabled={loading}>
                                     {loading ? "Signing in..." : "Continue"}
                                 </button>
                                 <button
-                                    className="h-8 cursor-pointer rounded border-2 border-blue-600 bg-white text-sm font-bold text-blue-600 transition-colors enabled:hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                    className="h-10 cursor-pointer rounded-md border border-motive-line bg-white text-sm font-semibold text-motive-ink transition-colors enabled:hover:bg-motive-surface disabled:cursor-not-allowed disabled:opacity-60"
                                     type="button"
                                     onClick={handleBack}
                                     disabled={loading}

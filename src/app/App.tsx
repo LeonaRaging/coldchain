@@ -18,7 +18,14 @@ export default function App() {
     }, []);
 
     if (checkingAuth) {
-        return <p>Loading...</p>;
+        return (
+            <div className="grid min-h-svh place-items-center bg-motive-surface">
+                <div className="flex items-center gap-2 text-sm text-motive-muted">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-motive-blue/25 border-t-motive-blue" />
+                    Loading…
+                </div>
+            </div>
+        );
     }
 
     return (
