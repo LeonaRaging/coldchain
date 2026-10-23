@@ -5,6 +5,11 @@ import { GeoPlacesClient, SearchTextCommand } from "@aws-sdk/client-geo-places";
 const apiKey = import.meta.env.VITE_LOCATION_API_KEY;
 const region = import.meta.env.VITE_AWS_REGION;
 
+export type PlaceResult = {
+  Title: string,
+  Position: [number, number]
+};
+
 export async function TruckPath(
   start: [number, number],
   destination: [number, number]
@@ -38,26 +43,20 @@ export async function TruckPath(
 export async function SearchPlace(
   text: string,
   biasPosition: [number, number]
-): Promise<[number, number] | undefined> {
+): Promise<PlaceResult[]> {
   const authHelper = withAPIKey(apiKey, region);
   const client = new GeoPlacesClient(authHelper.getClientConfig());
 
   const command = new SearchTextCommand({
-    QueryText: `${text}, Vietnam`,
+    QueryText: text,
     BiasPosition: biasPosition,
-    MaxResults: 10,
-    Filter: {
-        IncludeCountries: ["VNM"],
-    },
+    MaxResults: 7,
   });
 
   const response = await client.send(command);
 
-  const position = response.ResultItems?.[0]?.Position;
-
-  if (!position || position.length < 2) {
-    return undefined;
-  }
-
-  return [position[0], position[1]];
+  return response.ResultItems?.map((item) => ({
+    Title: item.Title || "",
+    Position: item.Position as [number, number],
+  })) || [];
 }

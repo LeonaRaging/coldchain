@@ -1,51 +1,67 @@
-import { Map } from "maplibre-gl";
-import { TruckPath, SearchPlace } from "./location";
+import { TruckPath } from "./location";
 import { fetchAuthSession } from "aws-amplify/auth";
 
 const TruckCreateUrl = import.meta.env.VITE_TRUCKS_CREATE_URL;
 
+let activeDemo:
+  | {
+      timer?: ReturnType<typeof setTimeout>;
+      cancelled: boolean;
+    }
+  | undefined;
+
+export function stopDemo() {
+  if (activeDemo?.timer !== undefined) {
+    clearTimeout(activeDemo.timer);
+  }
+
+  if (activeDemo) {
+    activeDemo.cancelled = true;
+    activeDemo = undefined;
+  }
+}
+
 export async function startDemo(
-  map: Map,
-  source: string,
-  destination: string,
+  selectedSource: [number, number],
+  selectedDestination: [number, number],
   truckId: string
 ) {
+  if (activeDemo) {
+    throw new Error("A demo is already running");
+  }
+
+  const demo: {
+    timer?: ReturnType<typeof setTimeout>;
+    cancelled: boolean;
+  } = {
+    cancelled: false,
+  };
+  activeDemo = demo;
+
   try {
-    const center = map.getCenter();
+    const lineStringPath = await TruckPath(selectedSource, selectedDestination);
 
-    const mapCenter: [number, number] = [
-      center.lng,
-      center.lat,
-    ];
-
-    const start = await SearchPlace(source, mapCenter);
-
-    if (!start) {
-      throw new Error(`Could not find source: ${source}`);
-    }
-
-    const end = await SearchPlace(destination, mapCenter);
-
-    if (!end) {
-      throw new Error(`Could not find destination: ${destination}`);
-    }
-
-    const lineStringPath = await TruckPath(start, end);
-
-    if (!lineStringPath) {
+    if (!lineStringPath || lineStringPath.length === 0) {
       throw new Error("No route returned");
     }
 
-    const lineString = lineStringPath;
-
+    const lineString = getSamplePath(lineStringPath);
     const session = await fetchAuthSession();
     const idToken = session.tokens?.idToken?.toString();
+
+    if (!idToken) {
+      throw new Error("No Cognito ID token found");
+    }
 
     let time = 0;
 
     async function sendTruckData() {
+      if (demo.cancelled || activeDemo !== demo) {
+        return;
+      }
+
       try {
-        await fetch(TruckCreateUrl, {
+        const response = await fetch(TruckCreateUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -59,19 +75,52 @@ export async function startDemo(
           }),
         });
 
+        if (!response.ok) {
+          throw new Error(`Failed to send truck data: ${response.status} ${response.statusText}`);
+        }
         time++;
       } catch (error) {
         console.error("Failed to send truck data:", error);
+        stopDemo();
+        return;
       }
 
       if (time < lineString.length) {
-        setTimeout(sendTruckData, 5000);
+        demo.timer = setTimeout(sendTruckData, 3000);
+      } else if (activeDemo === demo) {
+        activeDemo = undefined;
       }
     }
 
-    sendTruckData();
+    void sendTruckData();
 
   } catch (error) {
     console.error("ROUTE ERROR:", error);
+    if (activeDemo === demo) {
+      stopDemo();
+    }
+    throw error;
   }
+}
+
+function getSamplePath(
+  path: [number, number][],
+  numPositions: number = 20
+): [number, number][] {
+  if (path.length <= numPositions) {
+    return path;
+  }
+  const sampledPath: [number, number][] = [];
+  const step = (path.length - 1) / (numPositions - 1);
+
+  for (let i = 0; i < numPositions; i++) {
+    const index = Math.floor(i * step);
+    sampledPath.push(path[index]);
+  }
+
+  if (sampledPath[sampledPath.length - 1] !== path[path.length - 1]) {
+    sampledPath.push(path[path.length - 1]);
+  }
+
+  return sampledPath;
 }

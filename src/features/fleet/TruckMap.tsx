@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { LngLatBounds, Map, Marker, NavigationControl, Popup, setWorkerUrl } from "maplibre-gl";
 import { fetchAuthSession, getCurrentUser, signOut } from "aws-amplify/auth";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { startDemo } from "./TruckDemo";
+import { startDemo, stopDemo } from "./TruckDemo";
 import DemoJourney from "./DemoJourney";
 import QueryHistory from "../history/QueryHistory";
 import type { HistoryResult } from "../history/api";
@@ -12,6 +12,7 @@ import {
   MapIcon,
   SnowflakeIcon,
 } from "../../components/icons";
+import { SearchPlace, type PlaceResult } from "./location";
 
 const apiKey = import.meta.env.VITE_LOCATION_API_KEY;
 const region = import.meta.env.VITE_AWS_REGION;
@@ -163,7 +164,17 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
     return clearRoute;
   }, [history, tab]);
 
+  const [startResults, setStartResults] = useState<PlaceResult[]>([]);
+  const [endResults, setEndResults] = useState<PlaceResult[]>([]);
+
+  const [selectedSource, setSelectedSource] = useState<PlaceResult>();
+  const [selectedDestination, setSelectedDestination] = useState<PlaceResult>();
+
+  const [mapReady, setMapReady] = useState(false);
+
   async function goToLogin() {
+    stopDemo();
+
     try {
       await signOut();
     } catch (error) {
@@ -193,15 +204,15 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
     }
 
     mapRef.current = map;
+    queueMicrotask(() => setMapReady(true));
 
     map.addControl(new NavigationControl(), "top-right");
-
 
     const markers = new globalThis.Map<string, Marker>();
     let cancelled = false;
     const intervalId = setInterval(() => {
       void loadTrucks();
-    }, 5000);
+    }, 3000);
     let requestInProgress = false;
 
     async function loadTrucks() {
@@ -227,7 +238,6 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
         }
 
         const trucks: Truck[] = await response.json();
-
         if (cancelled) return;
 
         const currentTruckIds = new Set<string>();
@@ -292,6 +302,7 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
     return () => {
       cancelled = true;
 
+      stopDemo();
       clearInterval(intervalId);
 
       for (const marker of markers.values()) {
@@ -302,6 +313,69 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
       map.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    if (selectedSource && selectedSource.Title === source) {
+      return;
+    }
+    if (!source.trim()) {
+      return;
+    }
+    const center = mapRef.current.getCenter();
+    const mapCenter: [number, number] = [
+      center.lng,
+      center.lat,
+    ];
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const results = await SearchPlace(source.trim(), mapCenter);
+        if (!cancelled) {
+          setStartResults(results);
+        }
+      } catch (error) {
+        console.error("Could not load source places:", error);
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [source, selectedSource, mapReady]);
+
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    if (selectedDestination && selectedDestination.Title === destination) {
+      return;
+    }
+    if (!destination.trim()) {
+      return;
+    }
+
+    const center = mapRef.current.getCenter();
+    const mapCenter: [number, number] = [
+      center.lng,
+      center.lat,
+    ];
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const results = await SearchPlace(destination.trim(), mapCenter);
+        if (!cancelled) {
+          setEndResults(results);
+        }
+      } catch (error) {
+        console.error("Could not load destination places:", error);
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [destination, selectedDestination, mapReady]);
 
   return (
     <div className="flex min-h-svh bg-motive-surface text-left text-motive-ink">
@@ -419,7 +493,7 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
                     </h2>
                     <p className="text-xs text-motive-muted">
                       {tab === "map"
-                        ? "Vehicle positions refresh every 5 seconds"
+                        ? "Vehicle positions refresh every 3 seconds"
                         : "Route for the queried truck"}
                     </p>
                   </div>
@@ -445,19 +519,44 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
                   source={source}
                   destination={destination}
                   truckId={truckId}
-                  onSourceChange={setSource}
-                  onDestinationChange={setDestination}
+                  sourceResults={startResults}
+                  destinationResults={endResults}
+                  selectedSource={selectedSource}
+                  selectedDestination={selectedDestination}
+                  onSourceSelect={(place) => {
+                    setSource(place.Title);
+                    setSelectedSource(place);
+                    setStartResults([]);
+                  }}
+                  onDestinationSelect={(place) => {
+                    setDestination(place.Title);
+                    setSelectedDestination(place);
+                    setEndResults([]);
+                  }}
+                  onSourceChange={(value) => {
+                    setSource(value);
+                    setSelectedSource(undefined);
+                    setStartResults([]);
+                  }}
+                  onDestinationChange={(value) => {
+                    setDestination(value);
+                    setSelectedDestination(undefined);
+                    setEndResults([]);
+                  }}
                   onTruckIdChange={setTruckId}
                   onStart={() => {
+                    if (!selectedSource || !selectedDestination) {
+                      return;
+                    }
+
                     if (!mapRef.current) {
                       setMapError("The live map must be available before starting a demo journey.");
                       return;
                     }
 
                     startDemo(
-                      mapRef.current,
-                      source,
-                      destination,
+                      selectedSource.Position,
+                      selectedDestination.Position,
                       truckId
                     ).catch((error) => {
                       console.error("ROUTE ERROR:", error);
