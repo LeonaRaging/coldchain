@@ -26,7 +26,20 @@ export async function TruckPath(
   };
 
   const command = new CalculateRoutesCommand(input);
-  const response = await client.send(command);
+
+  let response;
+
+  try {
+    response = await client.send(command);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("outside of service area")) {
+      throw new Error(
+        "No road route can be found between these two locations (at least one is outside the service area).",
+        { cause: error }
+      );
+    }
+    throw error;
+  }
 
   const lineString =
     response.Routes?.[0].Legs?.[0].Geometry?.LineString;

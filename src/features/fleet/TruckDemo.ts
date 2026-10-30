@@ -42,7 +42,7 @@ export async function startDemo(
     const lineStringPath = await TruckPath(selectedSource, selectedDestination);
 
     if (!lineStringPath || lineStringPath.length === 0) {
-      throw new Error("No route returned");
+      throw new Error("No road route was returned for these two locations.");
     }
 
     const lineString = getSamplePath(lineStringPath);
