@@ -10,9 +10,12 @@ import {
   ClockIcon,
   LogOutIcon,
   MapIcon,
+  RouteIcon,
   SnowflakeIcon,
 } from "../../components/icons";
-import { SearchPlace, type PlaceResult } from "./location";
+import { SearchPlace, TruckPath, type PlaceResult } from "./location";
+import TripsPanel from "../trips/TripsPanel";
+import { fetchTruckTrips, displayStatus, readStoredTrips, type Trip } from "../trips/api";
 
 const apiKey = import.meta.env.VITE_LOCATION_API_KEY;
 const region = import.meta.env.VITE_AWS_REGION;
@@ -34,6 +37,14 @@ type TruckMapProps = {
 
 type DashboardTab = "map" | "history";
 
+function completedTripIds(): Set<string> {
+  return new Set(
+    readStoredTrips()
+      .filter((trip) => displayStatus(trip.status) === "COMPLETED")
+      .map((trip) => trip.tripId)
+  );
+}
+
 const tabItemClass = (active: boolean) =>
   `-mb-px cursor-pointer border-b-2 pb-3.5 pt-3.5 text-sm font-medium transition-colors ${
     active
@@ -48,6 +59,8 @@ function supportsWebGL2(): boolean {
     return false;
   }
 }
+
+
 
 export default function TruckMap({ onSignedOut }: TruckMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -64,6 +77,39 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
   const [username, setUsername] = useState("");
   const [tab, setTab] = useState<DashboardTab>("map");
   const [history, setHistory] = useState<HistoryResult | null>(null);
+  const [tripRoute, setTripRoute] = useState<{
+    tripId: string;
+    truckId: string;
+    points: [number, number][];
+  } | null>(null);
+  const [tripsOpen, setTripsOpen] = useState(false);
+  const [truckTick, setTruckTick] = useState(0);
+  const markersRef = useRef(new globalThis.Map<string, Marker>());
+  const lastFittedRoute = useRef<{
+    tripId: string;
+    truckId: string;
+    points: [number, number][];
+  } | null>(null);
+  const tripRouteRef = useRef<{
+    tripId: string;
+    truckId: string;
+    points: [number, number][];
+  } | null>(null);
+  const ongoingTripsRef = useRef<Trip[]>([]);
+  const routeCacheRef = useRef(new globalThis.Map<string, [number, number][]>());
+  const routePendingRef = useRef(new Set<string>());
+  const routeFailedRef = useRef(new Set<string>());
+
+  function updateTripRoute(
+    value: {
+      tripId: string;
+      truckId: string;
+      points: [number, number][];
+    } | null
+  ) {
+    tripRouteRef.current = value;
+    setTripRoute(value);
+  }
 
   useEffect(() => {
     getCurrentUser()
@@ -164,6 +210,152 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
     return clearRoute;
   }, [history, tab]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+
+    if (!map) return;
+
+    const clearRoute = () => {
+      let currentStyle;
+      try {
+        currentStyle = map.getStyle();
+      } catch {
+        currentStyle = undefined;
+      }
+      if (!currentStyle) return;
+      for (const layer of currentStyle.layers ?? []) {
+        if (layer.id.startsWith("trip-route")) {
+          map.removeLayer(layer.id);
+        }
+      }
+      for (const sourceId of Object.keys(currentStyle.sources ?? {})) {
+        if (sourceId.startsWith("trip-route")) {
+          map.removeSource(sourceId);
+        }
+      }
+    };
+
+    const drawSplitRoute = (
+      suffix: string,
+      route: [number, number][],
+      truckId: string,
+      withDots: boolean
+    ) => {
+      const truckLngLat = markersRef.current.get(truckId)?.getLngLat();
+      const truckPos = truckLngLat ? ([truckLngLat.lng, truckLngLat.lat] as [number, number]) : undefined;
+
+      let splitIndex = -1;
+      if (truckPos) {
+        let best = Number.POSITIVE_INFINITY;
+        for (let index = 0; index < route.length; index += 1) {
+          const [lng, lat] = route[index];
+          const distance = (lng - truckPos[0]) ** 2 + (lat - truckPos[1]) ** 2;
+          if (distance < best) {
+            best = distance;
+            splitIndex = index;
+          }
+        }
+      }
+
+      const redRoute = truckPos ? [...route.slice(0, splitIndex + 1), truckPos] : [];
+      const blueRoute = truckPos ? [truckPos, ...route.slice(splitIndex)] : route;
+      const RED = "#b91c1c";
+      const BLUE = "#005be2";
+
+      const addLine = (id: string, color: string, coordinates: [number, number][]) => {
+        map.addSource(id, {
+          type: "geojson",
+          data: {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "LineString", coordinates },
+          },
+        });
+        map.addLayer({
+          id,
+          type: "line",
+          source: id,
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": color,
+            "line-width": 3.5,
+            "line-blur": 0,
+            "line-opacity": 0.9,
+          },
+        });
+      };
+
+      if (truckPos) {
+        addLine(`trip-route-${suffix}-red`, RED, redRoute);
+        addLine(`trip-route-${suffix}-blue`, BLUE, blueRoute);
+      } else {
+        addLine(`trip-route-${suffix}-blue`, BLUE, blueRoute);
+      }
+
+      if (withDots) {
+        map.addSource(`trip-route-${suffix}-points`, {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: [
+              { coordinates: route[0], color: truckPos ? RED : BLUE },
+              { coordinates: route[route.length - 1], color: BLUE },
+            ].map(({ coordinates, color }) => ({
+              type: "Feature",
+              properties: { color },
+              geometry: { type: "Point", coordinates },
+            })),
+          },
+        });
+        map.addLayer({
+          id: `trip-route-${suffix}-points`,
+          type: "circle",
+          source: `trip-route-${suffix}-points`,
+          paint: {
+            "circle-radius": 6,
+            "circle-color": ["get", "color"],
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#ffffff",
+          },
+        });
+      }
+    };
+
+    const completed = completedTripIds();
+    const activeSelection =
+      tripRoute && !completed.has(tripRoute.tripId) ? tripRoute : null;
+
+    if (activeSelection) {
+      drawSplitRoute(
+        activeSelection.truckId,
+        activeSelection.points,
+        activeSelection.truckId,
+        true
+      );
+
+      const bounds = new LngLatBounds(activeSelection.points[0], activeSelection.points[0]);
+      for (const coordinates of activeSelection.points) {
+        bounds.extend(coordinates);
+      }
+      if (lastFittedRoute.current !== activeSelection) {
+        lastFittedRoute.current = activeSelection;
+        map.fitBounds(bounds, { padding: 70, maxZoom: 12, duration: 600 });
+      }
+    } else {
+      for (const trip of ongoingTripsRef.current) {
+        if (completed.has(trip.tripId)) {
+          continue;
+        }
+        const points = routeCacheRef.current.get(trip.tripId);
+        if (points && points.length >= 2) {
+          drawSplitRoute(trip.tripId, points, trip.truckId, false);
+        }
+      }
+    }
+
+    return clearRoute;
+  }, [tripRoute, truckTick]);
+
   const [startResults, setStartResults] = useState<PlaceResult[]>([]);
   const [endResults, setEndResults] = useState<PlaceResult[]>([]);
 
@@ -171,16 +363,41 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
   const [selectedDestination, setSelectedDestination] = useState<PlaceResult>();
 
   const [mapReady, setMapReady] = useState(false);
+  const [demoError, setDemoError] = useState("");
 
   async function goToLogin() {
     stopDemo();
-
     try {
       await signOut();
     } catch (error) {
       console.error("Sign out failed:", error);
     }
     onSignedOut();
+  }
+
+  function showTrip(trip: Trip) {
+    setTripsOpen(false);
+    setDemoError("");
+
+    void TruckPath(
+      [trip.source.longitude, trip.source.latitude],
+      [trip.destination.longitude, trip.destination.latitude]
+    )
+      .then((points) => {
+        if (!points || points.length < 2) {
+          updateTripRoute(null);
+          setDemoError("No road route was returned for this trip.");
+          return;
+        }
+        routeCacheRef.current.set(trip.tripId, points);
+        updateTripRoute({ tripId: trip.tripId, truckId: trip.truckId, points });
+      })
+      .catch((error) => {
+        updateTripRoute(null);
+        setDemoError(
+          error instanceof Error ? error.message : "No road route can be found for this trip."
+        );
+      });
   }
 
   useEffect(() => {
@@ -208,12 +425,65 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
 
     map.addControl(new NavigationControl(), "top-right");
 
-    const markers = new globalThis.Map<string, Marker>();
+    const markers = markersRef.current;
     let cancelled = false;
     const intervalId = setInterval(() => {
       void loadTrucks();
     }, 3000);
     let requestInProgress = false;
+
+    const markerAnimations = new globalThis.Map<
+      string,
+      { frame: number }
+    >();
+
+    function stopMarkerAnimation(truckId: string) {
+      const animation = markerAnimations.get(truckId);
+      if (animation) {
+        cancelAnimationFrame(animation.frame);
+        markerAnimations.delete(truckId);
+      }
+    }
+
+    function animateMarkerTo(
+      marker: Marker,
+      truckId: string,
+      [lng, lat]: [number, number],
+      durationMs = 1500
+    ) {
+      const current = marker.getLngLat();
+      const fromLng = current.lng;
+      const fromLat = current.lat;
+      const delta = Math.abs(fromLng - lng) + Math.abs(fromLat - lat);
+
+      if (delta < 1e-6) {
+        marker.setLngLat([lng, lat]);
+        return;
+      }
+
+      stopMarkerAnimation(truckId);
+      const record = { frame: 0 };
+      markerAnimations.set(truckId, record);
+
+      const startedAt = performance.now();
+      const step = (now: number) => {
+        const progress = Math.min((now - startedAt) / durationMs, 1);
+        const eased =
+          progress < 0.5
+            ? 2 * progress * progress
+            : 1 - (-2 * progress + 2) ** 2 / 2;
+        marker.setLngLat([
+          fromLng + (lng - fromLng) * eased,
+          fromLat + (lat - fromLat) * eased,
+        ]);
+        if (progress < 1) {
+          record.frame = requestAnimationFrame(step);
+        } else {
+          markerAnimations.delete(truckId);
+        }
+      };
+      record.frame = requestAnimationFrame(step);
+    }
 
     async function loadTrucks() {
       if (cancelled || requestInProgress) return;
@@ -240,11 +510,81 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
         const trucks: Truck[] = await response.json();
         if (cancelled) return;
 
-        const currentTruckIds = new Set<string>();
+        const ongoingResults = await Promise.all(
+          trucks.map(async (truck) => {
+            try {
+              const trips = await fetchTruckTrips(truck.truckId, "ONGOING");
+              return { truckId: truck.truckId, trips, failed: false };
+            } catch {
+              return { truckId: truck.truckId, trips: [] as Trip[], failed: true };
+            }
+          })
+        );
+        if (cancelled) return;
+
+        const completed = completedTripIds();
+        const selected = tripRouteRef.current;
+        const selectionDone = selected ? completed.has(selected.tripId) : false;
+        const desired = new Set<string>();
+        const ongoing: Trip[] = [];
+
+        for (const { truckId: id, trips, failed } of ongoingResults) {
+          for (const trip of trips) {
+            if (completed.has(trip.tripId)) {
+              routeCacheRef.current.delete(trip.tripId);
+              continue;
+            }
+            ongoing.push(trip);
+          }
+          if (failed && !(selected && !selectionDone)) {
+            desired.add(id);
+          }
+        }
+
+        for (const trip of ongoing) {
+          desired.add(trip.truckId);
+        }
+
+        if (selectionDone) {
+          updateTripRoute(null);
+        } else if (selected) {
+          desired.clear();
+          desired.add(selected.truckId);
+        }
+
+        for (const trip of ongoing) {
+          if (
+            routeCacheRef.current.has(trip.tripId) ||
+            routePendingRef.current.has(trip.tripId) ||
+            routeFailedRef.current.has(trip.tripId)
+          ) {
+            continue;
+          }
+          routePendingRef.current.add(trip.tripId);
+          const { tripId, source: tripSource, destination: tripDestination } = trip;
+          void TruckPath(
+            [tripSource.longitude, tripSource.latitude],
+            [tripDestination.longitude, tripDestination.latitude]
+          )
+            .then((points) => {
+              if (points && points.length >= 2) {
+                routeCacheRef.current.set(tripId, points);
+              } else {
+                routeFailedRef.current.add(tripId);
+              }
+              setTruckTick((tick) => tick + 1);
+            })
+            .catch(() => {
+              routeFailedRef.current.add(tripId);
+            })
+            .finally(() => {
+              routePendingRef.current.delete(tripId);
+            });
+        }
+
+        ongoingTripsRef.current = ongoing;
 
         for (const truck of trucks) {
-          currentTruckIds.add(truck.truckId);
-
           const coordinates: [number, number] = [
             truck.longitude,
             truck.latitude,
@@ -252,8 +592,15 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
 
           let marker = markers.get(truck.truckId);
 
+          if (!desired.has(truck.truckId)) {
+            stopMarkerAnimation(truck.truckId);
+            marker?.remove();
+            markers.delete(truck.truckId);
+            continue;
+          }
+
           if (marker) {
-            marker.setLngLat(coordinates);
+            animateMarkerTo(marker, truck.truckId, coordinates);
 
             marker.setPopup(
               new Popup().setText(
@@ -278,11 +625,8 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
           }
         }
 
-        for (const [truckId, marker] of markers) {
-          if (!currentTruckIds.has(truckId)) {
-            marker.remove();
-            markers.delete(truckId);
-          }
+        if (!cancelled) {
+          setTruckTick((tick) => tick + 1);
         }
       } catch (error) {
         if (!cancelled) {
@@ -304,6 +648,11 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
 
       stopDemo();
       clearInterval(intervalId);
+
+      for (const animation of markerAnimations.values()) {
+        cancelAnimationFrame(animation.frame);
+      }
+      markerAnimations.clear();
 
       for (const marker of markers.values()) {
         marker.remove();
@@ -388,7 +737,7 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
         <nav className="mt-2 flex flex-col gap-0.5 px-2">
           <button
             type="button"
-            onClick={() => setTab("map")}
+            onClick={() => { setTab("map"); setTripsOpen(false); }}
             className={`flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
               tab === "map"
                 ? "bg-white/10 text-white"
@@ -400,7 +749,7 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
           </button>
           <button
             type="button"
-            onClick={() => setTab("history")}
+            onClick={() => { setTab("history"); setTripsOpen(false); }}
             className={`flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
               tab === "history"
                 ? "bg-white/10 text-white"
@@ -431,7 +780,7 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative flex min-w-0 flex-1 flex-col">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-motive-line bg-white px-4 py-4 sm:px-6">
           <div className="flex items-center gap-3">
             <span className="grid h-9 w-9 place-items-center rounded-md bg-motive-sidebar text-white md:hidden">
@@ -443,7 +792,9 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
               </h1>
               <p className="mt-0.5 hidden text-xs text-motive-muted sm:block">
                 {tab === "map"
-                  ? "Live cold-chain tracking across your fleet"
+                  ? tripRoute
+                    ? "Route of the selected trip"
+                    : "Live cold-chain tracking across your fleet"
                   : "Past trips from the Athena data lake"}
               </p>
             </div>
@@ -464,14 +815,14 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
         <div className="flex items-center gap-6 border-b border-motive-line bg-white px-4 md:hidden">
           <button
             type="button"
-            onClick={() => setTab("map")}
+            onClick={() => { setTab("map"); setTripsOpen(false); }}
             className={tabItemClass(tab === "map")}
           >
             Fleet View
           </button>
           <button
             type="button"
-            onClick={() => setTab("history")}
+            onClick={() => { setTab("history"); setTripsOpen(false); }}
             className={tabItemClass(tab === "history")}
           >
             Route history
@@ -489,14 +840,35 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-motive-line px-4 py-3">
                   <div>
                     <h2 className="text-sm font-semibold text-motive-ink">
-                      {tab === "map" ? "Live fleet map" : "Route map"}
+                      {tab === "map"
+                        ? tripRoute
+                          ? "Trip route"
+                          : "Live fleet map"
+                        : "Route map"}
                     </h2>
                     <p className="text-xs text-motive-muted">
                       {tab === "map"
-                        ? "Vehicle positions refresh every 3 seconds"
+                        ? tripRoute
+                          ? "Route of the selected trip"
+                          : "Vehicle positions refresh every 3 seconds"
                         : "Route for the queried truck"}
                     </p>
                   </div>
+                  {tab === "map" && (
+                    <button
+                      type="button"
+                      onClick={() => setTripsOpen((open) => !open)}
+                      aria-pressed={tripsOpen}
+                      className={`inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors ${
+                        tripsOpen
+                          ? "border-transparent bg-motive-blue text-white hover:bg-motive-blue-dark"
+                          : "border-motive-line bg-white text-motive-ink hover:bg-motive-surface"
+                      }`}
+                    >
+                      <RouteIcon className="h-4 w-4" />
+                      Trips
+                    </button>
+                  )}
                 </div>
                 <div className="relative">
                   <div ref={containerRef} className="h-[420px] w-full sm:h-[560px] xl:h-[640px]" />
@@ -545,6 +917,8 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
                   }}
                   onTruckIdChange={setTruckId}
                   onStart={() => {
+                    setDemoError("");
+
                     if (!selectedSource || !selectedDestination) {
                       return;
                     }
@@ -558,10 +932,17 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
                       selectedSource.Position,
                       selectedDestination.Position,
                       truckId
-                    ).catch((error) => {
-                      console.error("ROUTE ERROR:", error);
-                    });
+                    )
+                      .catch((error) => {
+                        console.error("ROUTE ERROR:", error);
+                        setDemoError(
+                          error instanceof Error
+                            ? error.message
+                            : "Failed to create the demo route. Try different locations."
+                        );
+                      });
                   }}
+                  error={demoError}
                 />
               )}
             </div>
@@ -570,6 +951,12 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
               <QueryHistory onResult={setHistory} />
             </aside>
           </div>
+
+          {tripsOpen && tab === "map" && (
+            <aside data-drawer="trips" className="absolute inset-y-0 left-0 z-30 flex w-[340px] flex-col border-r border-motive-line bg-white shadow-xl">
+              <TripsPanel onShowTrip={showTrip} />
+            </aside>
+          )}
         </div>
       </div>
     </div>

@@ -16,6 +16,7 @@ type DemoJourneyProps = {
   onDestinationChange: (value: string) => void;
   onTruckIdChange: (value: string) => void;
   onStart: () => void;
+  error?: string;
 };
 
 const labelClass = "mb-1.5 block text-xs font-medium text-motive-muted";
@@ -36,6 +37,7 @@ export default function DemoJourney({
   onDestinationSelect,
   onTruckIdChange,
   onStart,
+  error,
 }: DemoJourneyProps) {
   const [sourceOpen, setSourceOpen] = useState(false);
   const [destinationOpen, setDestinationOpen] = useState(false);
@@ -158,6 +160,12 @@ export default function DemoJourney({
           Start demo
         </button>
       </div>
+
+      {error && (
+        <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+          {error}
+        </p>
+      )}
     </section>
   );
 }
@@ -184,7 +192,10 @@ function PlaceDropdown({
           key={`${place.Title}-${place.Position.join(",")}`}
           type="button"
           role="option"
-          onClick={() => onSelect(place)}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            onSelect(place);
+          }}
           className="block w-full rounded px-2 py-2 text-left text-sm text-motive-ink hover:bg-motive-surface"
         >
           {place.Title}
