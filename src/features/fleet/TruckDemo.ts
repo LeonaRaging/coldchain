@@ -3,49 +3,84 @@ import { fetchAuthSession } from "aws-amplify/auth";
 
 const TruckCreateUrl = import.meta.env.VITE_TRUCKS_CREATE_URL;
 
-let activeDemo:
-  | {
-      timer?: ReturnType<typeof setTimeout>;
-      cancelled: boolean;
-    }
-  | undefined;
+type Demo = {
+  timer?: ReturnType<typeof setTimeout>;
+  cancelled: boolean;
+  controller: AbortController;
+};
 
-export function stopDemo() {
-  if (activeDemo?.timer !== undefined) {
-    clearTimeout(activeDemo.timer);
+const activeDemos = new Map<string, Demo>();
+const demoStatusListeners = new Set<(running: boolean, truckId: string) => void>();
+
+function notifyDemoStatus(running: boolean, truckId: string) {
+  for (const listener of demoStatusListeners) {
+    listener(running, truckId);
   }
+}
 
-  if (activeDemo) {
-    activeDemo.cancelled = true;
-    activeDemo = undefined;
+export function isDemoRunning(): boolean {
+  return activeDemos.size > 0;
+}
+
+export function subscribeDemoStatus(
+  listener: (running: boolean, truckId: string) => void
+): () => void {
+  demoStatusListeners.add(listener);
+  return () => demoStatusListeners.delete(listener);
+}
+
+export function stopDemo(truckId?: string) {
+  const demos = truckId
+    ? [[truckId, activeDemos.get(truckId)] as const]
+    : [...activeDemos.entries()];
+
+  for (const [id, demo] of demos) {
+    if (!demo) continue;
+    if (demo.timer !== undefined) clearTimeout(demo.timer);
+    demo.cancelled = true;
+    demo.controller.abort();
+    activeDemos.delete(id);
+    notifyDemoStatus(false, id);
   }
 }
 
 export async function startDemo(
+  currentLocation: [number, number],
   selectedSource: [number, number],
   selectedDestination: [number, number],
-  truckId: string
+  truckId: string,
+  simulateTemperatureExcursion: boolean,
+  minimumTemperature: number,
+  maximumTemperature: number
 ) {
-  if (activeDemo) {
-    throw new Error("A demo is already running");
+  if (activeDemos.has(truckId)) {
+    throw new Error(`A demo is already running for ${truckId}`);
   }
 
-  const demo: {
-    timer?: ReturnType<typeof setTimeout>;
-    cancelled: boolean;
-  } = {
+  const demo: Demo = {
     cancelled: false,
+    controller: new AbortController(),
   };
-  activeDemo = demo;
+  activeDemos.set(truckId, demo);
+  notifyDemoStatus(true, truckId);
 
   try {
-    const lineStringPath = await TruckPath(selectedSource, selectedDestination);
+    const approachPath = await TruckPath(currentLocation, selectedSource);
+    const destinationPath = await TruckPath(selectedSource, selectedDestination);
 
-    if (!lineStringPath || lineStringPath.length === 0) {
-      throw new Error("No road route was returned for these two locations.");
+    if (
+      !approachPath ||
+      approachPath.length === 0 ||
+      !destinationPath ||
+      destinationPath.length === 0
+    ) {
+      throw new Error("No road route was returned for this demo journey.");
     }
 
-    const lineString = getSamplePath(lineStringPath);
+    const lineString = [
+      ...getSamplePath(approachPath),
+      ...getSamplePath(destinationPath).slice(1),
+    ];
     const session = await fetchAuthSession();
     const idToken = session.tokens?.idToken?.toString();
 
@@ -54,9 +89,21 @@ export async function startDemo(
     }
 
     let time = 0;
+    const durationMs = 60 * 1000;
+    const startedAt = performance.now();
+    const excursionStartMs = 10_000 + Math.random() * 30_000;
+    const excursionDurationMs = 5_000 + Math.random() * 10_000;
+    const excursionEndMs = excursionStartMs + excursionDurationMs;
+    const normalTemperature = () =>
+      minimumTemperature +
+      Math.random() * (maximumTemperature - minimumTemperature);
+    const excursionTemperature =
+      Math.random() < 0.5
+        ? minimumTemperature - Math.max(1, Math.abs(maximumTemperature - minimumTemperature) * 0.1)
+        : maximumTemperature + Math.max(1, Math.abs(maximumTemperature - minimumTemperature) * 0.1);
 
     async function sendTruckData() {
-      if (demo.cancelled || activeDemo !== demo) {
+      if (demo.cancelled || activeDemos.get(truckId) !== demo) {
         return;
       }
 
@@ -67,11 +114,17 @@ export async function startDemo(
             "Content-Type": "application/json",
             Authorization: `Bearer ${idToken}`,
           },
+          signal: demo.controller.signal,
           body: JSON.stringify({
             truck_id: truckId,
             longitude: lineString[time][0],
             latitude: lineString[time][1],
-            temperature: 0
+            temperature:
+              simulateTemperatureExcursion &&
+              performance.now() - startedAt >= excursionStartMs &&
+              performance.now() - startedAt <= excursionEndMs
+                ? excursionTemperature
+                : normalTemperature(),
           }),
         });
 
@@ -80,15 +133,24 @@ export async function startDemo(
         }
         time++;
       } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
         console.error("Failed to send truck data:", error);
-        stopDemo();
+        stopDemo(truckId);
         return;
       }
 
       if (time < lineString.length) {
-        demo.timer = setTimeout(sendTruckData, 3000);
-      } else if (activeDemo === demo) {
-        activeDemo = undefined;
+        const progress = time / Math.max(1, lineString.length - 1);
+        const nextDelay = Math.max(
+          0,
+          startedAt + progress * durationMs - performance.now()
+        );
+        demo.timer = setTimeout(sendTruckData, nextDelay);
+      } else if (activeDemos.get(truckId) === demo) {
+        activeDemos.delete(truckId);
+        notifyDemoStatus(false, truckId);
       }
     }
 
@@ -96,8 +158,8 @@ export async function startDemo(
 
   } catch (error) {
     console.error("ROUTE ERROR:", error);
-    if (activeDemo === demo) {
-      stopDemo();
+    if (activeDemos.get(truckId) === demo) {
+      stopDemo(truckId);
     }
     throw error;
   }

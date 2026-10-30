@@ -21,29 +21,44 @@ export default function PlaceAutocomplete({
   const [results, setResults] = useState<PlaceResult[]>([]);
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState<PlaceResult>();
+  const [biasPosition, setBiasPosition] = useState<[number, number]>(defaultCenter);
 
   const dropdownId = `${id}-listbox`;
 
   useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setBiasPosition([position.coords.longitude, position.coords.latitude]);
+      },
+      () => {},
+      { enableHighAccuracy: false, maximumAge: 300000, timeout: 5000 }
+    );
+  }, []);
+
+  useEffect(() => {
     if (picked && picked.Title === value) return;
     const query = value.trim();
-    if (!query) return;
+    if (query.length < 2) {
+      const clearTimer = window.setTimeout(() => setResults([]), 0);
+      return () => window.clearTimeout(clearTimer);
+    }
     let cancelled = false;
     const timer = setTimeout(() => {
-      SearchPlace(query, defaultCenter)
+      SearchPlace(query, biasPosition)
         .then((places) => {
           if (!cancelled) setResults(places);
         })
         .catch((error) =>
           console.error(`Could not load ${label.toLowerCase()} places:`, error)
         );
-    }, 300);
+    }, 450);
 
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [value, picked, label]);
+  }, [value, picked, label, biasPosition]);
 
   return (
     <div className="relative min-w-0">
@@ -118,7 +133,12 @@ function PlaceDropdown({
           }}
           className="block w-full rounded px-2 py-2 text-left text-sm text-motive-ink hover:bg-motive-surface"
         >
-          {place.Title}
+          <span className="block truncate">{place.Title}</span>
+          {place.Subtitle && place.Subtitle !== place.Title && (
+            <span className="mt-0.5 block truncate text-xs text-motive-muted">
+              {place.Subtitle}
+            </span>
+          )}
         </button>
       ))}
     </div>

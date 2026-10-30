@@ -1,22 +1,35 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   createTrip,
-  displayStatus,
-  readStoredTrips,
-  setStoredTripStatus,
+  fetchTrips,
   setTripStatus,
   type Trip,
 } from "./api";
+import { displayStatus, hasTripName, mergeTrips } from "./model";
+import { readStoredTrips, setStoredTripStatus } from "./storage";
 import PlaceAutocomplete from "./PlaceAutocomplete";
 import type { PlaceResult } from "../fleet/location";
 import { PlusIcon, RouteIcon } from "../../components/icons";
+import { ReverseGeocodePlace } from "../fleet/location";
+import type { UserTruck } from "../fleet/trucksApi";
+import { truckDisplayName, truckDisplayNameForId } from "../fleet/trucksApi";
 
 type TripsPanelProps = {
   onShowTrip: (trip: Trip) => void;
+  mapPickTarget: "source" | "destination" | null;
+  onStartMapPick: (target: "source" | "destination") => void;
+  onRegisterMapPickHandler: (
+    handler: ((target: "source" | "destination", place: PlaceResult) => void) | null
+  ) => void;
+  trucks: UserTruck[];
+  onTripStatusChanged: (trip: Trip, status: "ONGOING" | "COMPLETED") => void;
 };
 
 type CreateState = {
+  tripName: string;
   truckId: string;
+  minTemp: string;
+  maxTemp: string;
   source: string;
   destination: string;
   sourcePlace?: PlaceResult;
@@ -33,26 +46,138 @@ const STATUS_STYLES: Record<string, string> = {
   COMPLETED: "bg-emerald-50 text-emerald-700",
 };
 
-export default function TripsPanel({ onShowTrip }: TripsPanelProps) {
-  const [trips, setTrips] = useState<Trip[]>(() => readStoredTrips().filter(
-    (trip) => displayStatus(trip.status) !== "COMPLETED"
-  ));
+function activeTrips(items: Trip[]): Trip[] {
+  return items.filter(
+    (trip) => hasTripName(trip) && displayStatus(trip.status) !== "COMPLETED"
+  );
+}
+
+function tripPlaceName(trip: Trip, names: string[]): string | undefined {
+  for (const name of names) {
+    const value = trip[name];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function tripTemperatureRange(trip: Trip): string | undefined {
+  const min = trip.minTemp ?? trip.min_temp ?? trip.minTemperature ??
+    trip.min_temperature ?? trip.minimumTemperature ?? trip.minimum_temperature;
+  const max = trip.maxTemp ?? trip.max_temp ?? trip.maxTemperature ??
+    trip.max_temperature ?? trip.maximumTemperature ?? trip.maximum_temperature;
+  const minimum = Number(min);
+  const maximum = Number(max);
+  if (!Number.isFinite(minimum) || !Number.isFinite(maximum)) return undefined;
+  return `${minimum}°C to ${maximum}°C`;
+}
+
+export default function TripsPanel({
+  onShowTrip,
+  mapPickTarget,
+  onStartMapPick,
+  onRegisterMapPickHandler,
+  trucks,
+  onTripStatusChanged,
+}: TripsPanelProps) {
+  const [trips, setTrips] = useState<Trip[]>(() => activeTrips(readStoredTrips()));
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [statusError, setStatusError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
+  const [tripPlaceNames, setTripPlaceNames] = useState<Record<string, string>>({});
   const [form, setForm] = useState<CreateState>({
-    truckId: "DEMO-001",
+    tripName: "",
+    truckId: "",
+    minTemp: "",
+    maxTemp: "",
     source: "",
     destination: "",
   });
 
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetchTrips(controller.signal)
+      .then((remoteTrips) => setTrips(mergeTrips(readStoredTrips(), remoteTrips)))
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        console.error("Could not load trips:", error);
+        setTrips(activeTrips(readStoredTrips()));
+        setLoadError(error instanceof Error ? error.message : "Could not load trips");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [reloadKey]);
+
+  useEffect(() => {
+    onRegisterMapPickHandler((target, place) => {
+      const update = (current: CreateState) =>
+        target === "source"
+          ? { ...current, source: place.Title, sourcePlace: place }
+          : { ...current, destination: place.Title, destinationPlace: place };
+      setForm(update);
+    });
+    return () => onRegisterMapPickHandler(null);
+  }, [onRegisterMapPickHandler]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all(
+      trips.flatMap((trip) =>
+        [
+          ["source", trip.source],
+          ["destination", trip.destination],
+        ] as const
+      ).map(async ([kind, point], index) => {
+        try {
+          const place = await ReverseGeocodePlace([point.longitude, point.latitude]);
+          const key = `${trips[Math.floor(index / 2)]?.tripId}-${kind}`;
+          return { key, ...place };
+        } catch (error) {
+          console.error("Could not resolve trip address:", error);
+          return null;
+        }
+      })
+    ).then((places) => {
+      if (!cancelled) {
+        setTripPlaceNames(
+          Object.fromEntries(
+            places
+              .filter((place): place is { key: string; name?: string } =>
+                Boolean(place?.key && place.name)
+              )
+              .map((place) => [place.key, place.name])
+          )
+        );
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [trips]);
+
   function refresh() {
-    setTrips(
-      readStoredTrips().filter((trip) => displayStatus(trip.status) !== "COMPLETED")
-    );
+    setLoading(true);
+    setLoadError("");
+    setReloadKey((key) => key + 1);
   }
 
   function advanceTrip(trip: Trip, next: "ONGOING" | "COMPLETED") {
+    if (
+      next === "COMPLETED" &&
+      !window.confirm(`Complete the trip for ${truckDisplayNameForId(trucks, trip.truckId)}?`)
+    ) {
+      return;
+    }
+
+    setStatusError("");
+    const previousStatus = displayStatus(trip.status);
     setStoredTripStatus(trip.tripId, next);
     if (next === "COMPLETED") {
       setTrips((current) => current.filter((item) => item.tripId !== trip.tripId));
@@ -63,22 +188,63 @@ export default function TripsPanel({ onShowTrip }: TripsPanelProps) {
         )
       );
     }
-    void setTripStatus(trip.tripId, next).catch(() => {
-      console.warn(`Status change for ${trip.tripId} could not be sent to the API`);
-    });
+    void setTripStatus(trip.tripId, next)
+      .then(() => onTripStatusChanged({ ...trip, status: next }, next))
+      .catch((error: unknown) => {
+        const message =
+          error instanceof Error
+            ? error.message
+            : `Status change for ${trip.tripId} could not be sent to the API`;
+        setStatusError(message);
+        setStoredTripStatus(trip.tripId, previousStatus);
+        setTrips((current) => {
+          if (previousStatus === "COMPLETED") {
+            return current;
+          }
+          const existing = current.find((item) => item.tripId === trip.tripId);
+          if (existing) {
+            return current.map((item) =>
+              item.tripId === trip.tripId
+                ? { ...item, status: previousStatus }
+                : item
+            );
+          }
+          return [...current, { ...trip, status: previousStatus }];
+        });
+      });
   }
 
   async function handleCreate() {    setCreateError("");
 
-    if (!form.sourcePlace || !form.destinationPlace) {
-      setCreateError("Select both a source and a destination from the suggestions.");
+    const minTemp = Number(form.minTemp);
+    const maxTemp = Number(form.maxTemp);
+    if (
+      !form.tripName.trim() ||
+      !form.truckId ||
+      !form.minTemp.trim() ||
+      !form.maxTemp.trim() ||
+      !Number.isFinite(minTemp) ||
+      !Number.isFinite(maxTemp) ||
+      !form.sourcePlace ||
+      !form.destinationPlace
+    ) {
+      setCreateError(
+        "Enter a trip name, temperature range, truck, source, and destination."
+      );
+      return;
+    }
+    if (minTemp > maxTemp) {
+      setCreateError("Minimum temperature cannot be greater than maximum temperature.");
       return;
     }
 
     setCreating(true);
     try {
       await createTrip({
+        tripName: form.tripName.trim(),
         truckId: form.truckId.trim(),
+        minTemp,
+        maxTemp,
         source: {
           latitude: form.sourcePlace.Position[1],
           longitude: form.sourcePlace.Position[0],
@@ -87,10 +253,19 @@ export default function TripsPanel({ onShowTrip }: TripsPanelProps) {
           latitude: form.destinationPlace.Position[1],
           longitude: form.destinationPlace.Position[0],
         },
+        sourceName: form.sourcePlace.Title,
+        destinationName: form.destinationPlace.Title,
       });
-      setForm({ truckId: form.truckId, source: "", destination: "" });
+      setForm({
+        tripName: "",
+        truckId: form.truckId,
+        minTemp: "",
+        maxTemp: "",
+        source: "",
+        destination: "",
+      });
       setFormOpen(false);
-      refresh();
+      void refresh();
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : "Failed to create trip");
     } finally {
@@ -99,7 +274,16 @@ export default function TripsPanel({ onShowTrip }: TripsPanelProps) {
   }
 
   const canCreate =
-    form.truckId.trim().length > 0 && !!form.sourcePlace && !!form.destinationPlace && !creating;
+    form.tripName.trim().length > 0 &&
+    form.truckId.length > 0 &&
+    form.minTemp.trim().length > 0 &&
+    form.maxTemp.trim().length > 0 &&
+    Number.isFinite(Number(form.minTemp)) &&
+    Number.isFinite(Number(form.maxTemp)) &&
+    Number(form.minTemp) <= Number(form.maxTemp) &&
+    !!form.sourcePlace &&
+    !!form.destinationPlace &&
+    !creating;
 
   return (
     <div className="flex h-full min-w-0 flex-col bg-white">
@@ -127,34 +311,116 @@ export default function TripsPanel({ onShowTrip }: TripsPanelProps) {
           <div className="flex flex-col gap-3 p-4">
             <p className="text-xs font-medium text-motive-muted">New trip</p>
             <div className="min-w-0">
-              <label className={labelClass} htmlFor="trip-truck">
-                Truck ID
-              </label>
+              <label className={labelClass} htmlFor="trip-name">Trip name</label>
               <input
+                id="trip-name"
+                value={form.tripName}
+                onChange={(event) => setForm((current) => ({ ...current, tripName: event.target.value }))}
+                className={inputClass}
+                placeholder="e.g. Morning delivery"
+                autoFocus
+              />
+            </div>
+            <div className="min-w-0">
+              <label className={labelClass} htmlFor="trip-truck">
+                Truck
+              </label>
+              <select
                 id="trip-truck"
                 value={form.truckId}
                 onChange={(e) => setForm((c) => ({ ...c, truckId: e.target.value }))}
                 className={inputClass}
-              />
+              >
+                <option value="">Select a truck</option>
+                {trucks.map((truck) => (
+                  <option key={truck.truckId} value={truck.truckId}>
+                    {truckDisplayName(truck)}
+                  </option>
+                ))}
+              </select>
             </div>
-            <PlaceAutocomplete
-              id="trip-source"
-              label="Source"
-              value={form.source}
-              onTextChange={(value) => setForm((c) => ({ ...c, source: value, sourcePlace: undefined }))}
-              onPick={(place) => setForm((c) => ({ ...c, source: place.Title, sourcePlace: place }))}
-            />
-            <PlaceAutocomplete
-              id="trip-destination"
-              label="Destination"
-              value={form.destination}
-              onTextChange={(value) =>
-                setForm((c) => ({ ...c, destination: value, destinationPlace: undefined }))
-              }
-              onPick={(place) =>
-                setForm((c) => ({ ...c, destination: place.Title, destinationPlace: place }))
-              }
-            />
+            <div className="grid grid-cols-2 gap-2">
+              <div className="min-w-0">
+                <label className={labelClass} htmlFor="trip-min-temp">
+                  Minimum temperature
+                </label>
+                <input
+                  id="trip-min-temp"
+                  type="number"
+                  value={form.minTemp}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, minTemp: event.target.value }))
+                  }
+                  className={inputClass}
+                  placeholder="e.g. 2"
+                  step="any"
+                />
+              </div>
+              <div className="min-w-0">
+                <label className={labelClass} htmlFor="trip-max-temp">
+                  Maximum temperature
+                </label>
+                <input
+                  id="trip-max-temp"
+                  type="number"
+                  value={form.maxTemp}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, maxTemp: event.target.value }))
+                  }
+                  className={inputClass}
+                  placeholder="e.g. 8"
+                  step="any"
+                />
+              </div>
+            </div>
+            <div className="flex items-end gap-2">
+              <div className="min-w-0 flex-1">
+                <PlaceAutocomplete
+                  id="trip-source"
+                  label="Source"
+                  value={form.source}
+                  onTextChange={(value) => setForm((c) => ({ ...c, source: value, sourcePlace: undefined }))}
+                  onPick={(place) => setForm((c) => ({ ...c, source: place.Title, sourcePlace: place }))}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => onStartMapPick("source")}
+                className={`h-10 shrink-0 rounded-md border px-2.5 text-xs font-medium ${
+                  mapPickTarget === "source"
+                    ? "border-motive-blue bg-motive-blue text-white"
+                    : "border-motive-line bg-white text-motive-blue hover:bg-motive-surface"
+                }`}
+              >
+                {mapPickTarget === "source" ? "Click map" : "Pick on map"}
+              </button>
+            </div>
+            <div className="flex items-end gap-2">
+              <div className="min-w-0 flex-1">
+                <PlaceAutocomplete
+                  id="trip-destination"
+                  label="Destination"
+                  value={form.destination}
+                  onTextChange={(value) =>
+                    setForm((c) => ({ ...c, destination: value, destinationPlace: undefined }))
+                  }
+                  onPick={(place) =>
+                    setForm((c) => ({ ...c, destination: place.Title, destinationPlace: place }))
+                  }
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => onStartMapPick("destination")}
+                className={`h-10 shrink-0 rounded-md border px-2.5 text-xs font-medium ${
+                  mapPickTarget === "destination"
+                    ? "border-motive-blue bg-motive-blue text-white"
+                    : "border-motive-line bg-white text-motive-blue hover:bg-motive-surface"
+                }`}
+              >
+                {mapPickTarget === "destination" ? "Click map" : "Pick on map"}
+              </button>
+            </div>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -189,7 +455,29 @@ export default function TripsPanel({ onShowTrip }: TripsPanelProps) {
           </div>
         ) : (
           <div className="flex flex-col">
-            {trips.length === 0 && (
+            {loadError && (
+              <div className="m-4 rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                <p>{loadError}</p>
+                <button
+                  type="button"
+                  onClick={refresh}
+                  className="mt-2 font-semibold underline underline-offset-2"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+            {statusError && (
+              <div className="m-4 rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                {statusError}
+              </div>
+            )}
+            {loading && trips.length === 0 && (
+              <p className="px-4 py-6 text-center text-xs text-motive-muted">
+                Loading trips…
+              </p>
+            )}
+            {!loading && !loadError && trips.length === 0 && (
               <p className="px-4 py-6 text-center text-xs text-motive-muted">
                 No trips yet — use the + button to plan one.
               </p>
@@ -214,8 +502,20 @@ export default function TripsPanel({ onShowTrip }: TripsPanelProps) {
                     className="min-w-0 flex-1 cursor-pointer text-left"
                   >
                     <span className="flex items-center gap-2">
-                      <span className="truncate text-sm font-medium text-motive-ink">
-                        {trip.truckId}
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium text-motive-ink">
+                          {trip.tripName || trip.tripId}
+                        </span>
+                        {trip.tripName && (
+                          <span className="block truncate text-[11px] text-motive-muted">
+                            Truck: {truckDisplayNameForId(trucks, trip.truckId)}
+                          </span>
+                        )}
+                        {tripTemperatureRange(trip) && (
+                          <span className="block truncate text-[11px] text-motive-muted">
+                            Temperature: {tripTemperatureRange(trip)}
+                          </span>
+                        )}
                       </span>
                       <span
                         className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
@@ -225,11 +525,29 @@ export default function TripsPanel({ onShowTrip }: TripsPanelProps) {
                         {status}
                       </span>
                     </span>
-                    <span className="mt-0.5 flex items-center gap-1.5 text-xs text-motive-muted">
+                    <span className="mt-0.5 flex items-start gap-1.5 text-xs text-motive-muted">
                       <RouteIcon className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">
-                        {trip.source.latitude.toFixed(3)}, {trip.source.longitude.toFixed(3)} →{" "}
-                        {trip.destination.latitude.toFixed(3)}, {trip.destination.longitude.toFixed(3)}
+                        <span className="flex min-w-0 flex-1 items-start gap-1">
+                          <span className="min-w-0 flex-1">
+                            <span className="block break-words">
+                              {tripPlaceName(trip, [
+                                "sourceName",
+                                "source_name",
+                                "originName",
+                                "origin_name",
+                              ]) ||
+                                tripPlaceNames[`${trip.tripId}-source`] ||
+                                "Source"}
+                            </span>
+                          </span>
+                        <span aria-hidden="true">→</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block break-words">
+                              {tripPlaceName(trip, ["destinationName", "destination_name"]) ||
+                                tripPlaceNames[`${trip.tripId}-destination`] ||
+                                "Destination"}
+                            </span>
+                          </span>
                       </span>
                     </span>
                   </button>
@@ -238,7 +556,11 @@ export default function TripsPanel({ onShowTrip }: TripsPanelProps) {
                       <button
                         type="button"
                         onClick={() => advanceTrip(trip, nextAction)}
-                        className="w-full cursor-pointer rounded-md border border-motive-line bg-white px-2.5 py-1.5 text-xs font-medium text-motive-blue transition-colors hover:bg-motive-blue/5"
+                        className={`w-full cursor-pointer rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                          nextAction === "COMPLETED"
+                            ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                            : "border-motive-blue bg-motive-blue text-white hover:bg-motive-blue-dark"
+                        }`}
                       >
                         {nextAction === "ONGOING" ? "Start trip" : "Complete"}
                       </button>
@@ -246,7 +568,7 @@ export default function TripsPanel({ onShowTrip }: TripsPanelProps) {
                     <button
                       type="button"
                       onClick={() => onShowTrip(trip)}
-                      className="cursor-pointer text-xs font-medium text-motive-blue underline-offset-2 transition-colors hover:underline"
+                      className="w-full cursor-pointer rounded-md bg-motive-blue px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-motive-blue-dark"
                     >
                       View path
                     </button>

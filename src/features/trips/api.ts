@@ -1,30 +1,34 @@
 import { fetchAuthSession } from "aws-amplify/auth";
+import {
+  normalizeTrip,
+  normalizeTripList,
+  hasTripName,
+  type Trip,
+  type TripStatus,
+} from "./model";
+import { readStoredTrips, writeStoredTrips } from "./storage";
 
 const tripsApiUrl = import.meta.env.VITE_TRIPS_API_URL || "/stage1/trips";
 const trucksApiUrl = import.meta.env.VITE_TRUCKS_API_URL || "/stage1/trucks/positions";
 const trucksBase = trucksApiUrl.replace(/\/positions\/?$/, "");
 
-export type TripGeoPoint = {
-  latitude: number;
-  longitude: number;
-};
-
-export type Trip = {
-  tripId: string;
-  truckId: string;
-  source: TripGeoPoint;
-  destination: TripGeoPoint;
-  status?: string;
-  [key: string]: unknown;
-};
+export type { Trip, TripStatus } from "./model";
+export type { TripGeoPoint } from "./model";
+export { displayStatus } from "./model";
+export { hasTripName } from "./model";
+export { oneTripPerTruck } from "./model";
+export { readStoredTrips, writeStoredTrips } from "./storage";
 
 export type CreateTripParams = {
+  tripName: string;
   truckId: string;
-  source: TripGeoPoint;
-  destination: TripGeoPoint;
+  minTemp: number;
+  maxTemp: number;
+  sourceName?: string;
+  destinationName?: string;
+  source: import("./model").TripGeoPoint;
+  destination: import("./model").TripGeoPoint;
 };
-
-const TRIPS_STORAGE_KEY = "coldchain.trips";
 
 async function bearerToken(): Promise<string> {
   const session = await fetchAuthSession();
@@ -33,34 +37,14 @@ async function bearerToken(): Promise<string> {
   return idToken;
 }
 
-function toPoint(point: unknown): TripGeoPoint | null {
-  if (!point || typeof point !== "object") return null;
-  const { latitude, longitude } = point as Record<string, unknown>;
-  const lat = Number(latitude);
-  const lng = Number(longitude);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  return { latitude: lat, longitude: lng };
-}
-
-function normalizeTrip(raw: Record<string, unknown>): Trip | null {
-  if (!raw || typeof raw !== "object") return null;
-  const tripId = String(raw.tripId ?? raw.trip_id ?? raw.id ?? "");
-  const truckId = String(raw.truckId ?? raw.truck_id ?? "");
-  const source = toPoint(raw.source ?? raw.origin);
-  const destination = toPoint(raw.destination);
-  if (!tripId || !truckId || !source || !destination) return null;
-  return {
-    ...(raw as unknown as Trip),
-    tripId,
-    truckId,
-    source,
-    destination,
-    status: (raw.status as string) || undefined,
-  };
-}
 
 export async function createTrip({
+  tripName,
   truckId,
+  minTemp,
+  maxTemp,
+  sourceName,
+  destinationName,
   source,
   destination,
 }: CreateTripParams): Promise<Trip> {
@@ -71,7 +55,16 @@ export async function createTrip({
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ truckId, source, destination }),
+    body: JSON.stringify({
+      tripName,
+      truckId,
+      minTemperature: minTemp,
+      maxTemperature: maxTemp,
+      ...(sourceName ? { sourceName } : {}),
+      ...(destinationName ? { destinationName } : {}),
+      source,
+      destination,
+    }),
   });
 
   if (!response.ok) {
@@ -79,39 +72,32 @@ export async function createTrip({
     throw new Error(detail.message || `Failed to create trip (${response.status})`);
   }
 
-  const raw = (await response.json()) as Record<string, unknown>;
-  const trip = normalizeTrip(raw);
+  const raw = (await response.json()) as unknown;
+  const trip =
+    normalizeTrip(raw) ||
+    (raw &&
+    typeof raw === "object" &&
+    !Array.isArray(raw)
+      ? normalizeTrip(
+          (raw as Record<string, unknown>).trip ??
+            (raw as Record<string, unknown>).data ??
+            (raw as Record<string, unknown>).item
+        )
+      : null);
   if (!trip) throw new Error("Trip API returned an unexpected response");
+  const namedTrip: Trip = {
+    ...trip,
+    ...(sourceName ? { sourceName } : {}),
+    ...(destinationName ? { destinationName } : {}),
+  };
 
   const stored = readStoredTrips().filter(
-    (existing) => existing.tripId !== trip.tripId
+    (existing) => existing.tripId !== namedTrip.tripId
   );
-  stored.push(trip);
+  stored.push(namedTrip);
   writeStoredTrips(stored);
 
-  return trip;
-}
-
-export function readStoredTrips(): Trip[] {
-  try {
-    const raw = window.localStorage.getItem(TRIPS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((item) => normalizeTrip(item as Record<string, unknown>))
-      .filter((trip): trip is Trip => trip !== null);
-  } catch {
-    return [];
-  }
-}
-
-export function writeStoredTrips(trips: Trip[]): void {
-  try {
-    window.localStorage.setItem(TRIPS_STORAGE_KEY, JSON.stringify(trips));
-  } catch {
-    console.error("Could not persist trips locally");
-  }
+  return namedTrip;
 }
 
 export function mergeTripStatuses(updates: Map<string, Trip>): void {
@@ -120,6 +106,68 @@ export function mergeTripStatuses(updates: Map<string, Trip>): void {
     (trip) => updates.get(trip.tripId) ?? trip
   );
   writeStoredTrips(merged);
+}
+
+export async function fetchTrips(signal?: AbortSignal): Promise<Trip[]> {
+  const token = await bearerToken();
+  const response = await fetch(trucksApiUrl, {
+    signal,
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Truck positions API returned ${response.status}`);
+  }
+
+  const raw = (await response.json()) as unknown;
+  const trucks: unknown[] = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === "object" && Array.isArray((raw as { trucks?: unknown[] }).trucks)
+      ? (raw as { trucks: unknown[] }).trucks
+      : [];
+  const truckIds = trucks
+    .map((truck) => {
+      if (!truck || typeof truck !== "object") return "";
+      const value = truck as Record<string, unknown>;
+      return String(value.truckId ?? value.truck_id ?? "");
+    })
+    .filter((truckId) => truckId.length > 0);
+
+  const tripsByTruck = await Promise.all(
+    truckIds.map((truckId) => fetchTruckTrips(truckId, undefined, signal))
+  );
+  return tripsByTruck.flat().filter(hasTripName);
+}
+
+export async function fetchCompletedTrips(signal?: AbortSignal): Promise<Trip[]> {
+  const token = await bearerToken();
+  const response = await fetch(trucksApiUrl, {
+    signal,
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Truck positions API returned ${response.status}`);
+  }
+
+  const raw = (await response.json()) as unknown;
+  const trucks: unknown[] = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === "object" && Array.isArray((raw as { trucks?: unknown[] }).trucks)
+      ? (raw as { trucks: unknown[] }).trucks
+      : [];
+  const truckIds = trucks
+    .map((truck) => {
+      if (!truck || typeof truck !== "object") return "";
+      const value = truck as Record<string, unknown>;
+      return String(value.truckId ?? value.truck_id ?? "");
+    })
+    .filter((truckId) => truckId.length > 0);
+
+  const tripsByTruck = await Promise.all(
+    truckIds.map((truckId) => fetchTruckTrips(truckId, "COMPLETED", signal))
+  );
+  return tripsByTruck.flat().filter(hasTripName);
 }
 
 export async function fetchTrip(tripId: string): Promise<Trip> {
@@ -139,20 +187,6 @@ export async function fetchTrip(tripId: string): Promise<Trip> {
   return trip;
 }
 
-export type TripStatus = "PLANNED" | "ONGOING" | "COMPLETED";
-
-export function displayStatus(raw: string | undefined): Exclude<TripStatus, never> {
-  const value = (raw ?? "").toUpperCase();
-  if (value === "ONGOING" || value === "IN_PROGRESS" || value === "STARTED") {
-    return "ONGOING";
-  }
-  if (value === "COMPLETED" || value === "DONE" || value === "FINISHED") {
-    return "COMPLETED";
-  }
-  return "PLANNED";
-}
-
-
 export async function setTripStatus(
   tripId: string,
   status: TripStatus
@@ -171,26 +205,33 @@ export async function setTripStatus(
   );
 
   if (!response.ok) {
-    const detail = (await response.json().catch(() => ({}))) as { message?: string };
-    throw new Error(detail.message || `Failed to update trip ${tripId} (${response.status})`);
+    const body = await response.text();
+    let message = "";
+    try {
+      const detail = JSON.parse(body) as {
+        message?: string;
+        error?: string;
+      };
+      message = detail.message || detail.error || "";
+    } catch {
+      message = body.trim();
+    }
+    throw new Error(message || `Failed to update trip ${tripId} (${response.status})`);
   }
-}
-
-export function setStoredTripStatus(tripId: string, status: TripStatus): void {
-  writeStoredTrips(
-    readStoredTrips().map((trip) =>
-      trip.tripId === tripId ? { ...trip, status } : trip
-    )
-  );
 }
 
 export async function fetchTruckTrips(
   truckId: string,
-  status: "ONGOING" | "COMPLETED"
+  status?: "ONGOING" | "COMPLETED",
+  signal?: AbortSignal
 ): Promise<Trip[]> {
+  if (signal?.aborted) {
+    throw new DOMException("The request was aborted", "AbortError");
+  }
   const token = await bearerToken();
+  const statusQuery = status ? `?status=${status}` : "";
   const response = await fetch(
-    `${trucksBase}/${encodeURIComponent(truckId)}/trips?status=${status}`,
+    `${trucksBase}/${encodeURIComponent(truckId)}/trips${statusQuery}`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
 
@@ -198,13 +239,9 @@ export async function fetchTruckTrips(
     throw new Error(`Truck-trips API returned ${response.status}`);
   }
 
-  const raw = (await response.json()) as unknown;
-  const list: unknown[] = Array.isArray(raw)
-    ? raw
-    : raw && typeof raw === "object" && Array.isArray((raw as { trips?: unknown[] }).trips)
-      ? (raw as { trips: unknown[] }).trips
-      : [];
-  return list
-    .map((item) => normalizeTrip(item as Record<string, unknown>))
-    .filter((trip): trip is Trip => trip !== null);
+  if (signal?.aborted) {
+    throw new DOMException("The request was aborted", "AbortError");
+  }
+
+  return normalizeTripList(await response.json());
 }

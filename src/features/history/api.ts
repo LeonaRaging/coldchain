@@ -1,33 +1,32 @@
-const historyApiUrl = import.meta.env.VITE_HISTORY_API_URL;
+const tripsApiBase = import.meta.env.VITE_TRIPS_API_URL || "/stage1/trips";
 
 export type HistoryRecord = Record<string, string | null>;
 
 export type HistoryResult = {
+  tripId: string;
   truckId: string;
   count: number;
   records: HistoryRecord[];
 };
 
 export type HistoryParams = {
-  truckId: string;
+  tripId: string;
   limit?: number;
   idToken: string;
 };
 
+type HistoryApiResponse = Partial<HistoryResult> & {
+  locations?: HistoryRecord[];
+  points?: HistoryRecord[];
+  trips?: unknown[];
+};
+
 export async function fetchHistory({
-  truckId,
+  tripId,
   limit,
   idToken,
 }: HistoryParams): Promise<HistoryResult> {
-  if (!historyApiUrl) {
-    throw new Error("VITE_HISTORY_API_URL is not configured");
-  }
-
-  const url = new URL(historyApiUrl, window.location.origin);
-  url.searchParams.set("truckId", truckId);
-  if (limit !== undefined) {
-    url.searchParams.set("limit", String(limit));
-  }
+  const url = `${tripsApiBase}/${encodeURIComponent(tripId)}/locations`;
 
   const response = await fetch(url, {
     headers: {
@@ -45,12 +44,31 @@ export async function fetchHistory({
     );
   }
 
-  const data = (await response.json()) as Partial<HistoryResult>;
-  const records = data.records ?? [];
+  const data = (await response.json()) as HistoryApiResponse | HistoryRecord[];
+  const payload: HistoryApiResponse = Array.isArray(data) ? {} : data;
+  const records = Array.isArray(data)
+    ? data
+    : payload.records ??
+      payload.locations ??
+      payload.points ??
+      (payload.trips ?? []).flatMap((trip: unknown) => {
+        if (!trip || typeof trip !== "object") return [];
+        const value = trip as { locations?: unknown; points?: unknown };
+        const locations = value.locations ?? value.points;
+        return Array.isArray(locations) ? locations : [];
+      });
+  const shownRecords =
+    limit === undefined ? records : records.slice(0, Math.max(0, limit));
 
   return {
-    truckId: data.truckId ?? truckId,
-    count: data.count ?? records.length,
-    records,
+    tripId,
+    truckId:
+      typeof payload.truckId === "string"
+        ? payload.truckId
+        : "",
+    count:
+      typeof payload.count === "number" ? payload.count
+        : records.length,
+    records: shownRecords,
   };
 }
