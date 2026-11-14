@@ -279,10 +279,10 @@ export default function QueryHistory({
         setTripPlaceNames(
           Object.fromEntries(
             places
-              .filter((place): place is { key: string; name?: string } =>
+              .filter((place): place is { key: string; name: string } =>
                 Boolean(place?.key && place.name)
               )
-              .map((place) => [place.key, place.name])
+              .map((place): [string, string] => [place.key, place.name])
           )
         );
       }
