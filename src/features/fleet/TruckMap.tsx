@@ -8,6 +8,7 @@ import {
   setWorkerUrl,
 } from "maplibre-gl";
 import type { MapLayerMouseEvent } from "maplibre-gl";
+import type { Feature, FeatureCollection, GeoJSON as GeoJSONData } from "geojson";
 import { fetchAuthSession, getCurrentUser, signOut } from "aws-amplify/auth";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { startDemo, stopDemo } from "./TruckDemo";
@@ -46,6 +47,8 @@ import {
   readStoredTrips,
   type Trip,
 } from "../trips/api";
+import { readStartedTripIds, writeStartedTripIds } from "../trips/storage";
+import { distanceMeters, projectOntoRoute, splitRoute } from "./routeProgress";
 
 const apiKey = import.meta.env.VITE_LOCATION_API_KEY;
 const region = import.meta.env.VITE_AWS_REGION;
@@ -66,6 +69,148 @@ type CachedTripRoute = {
   approach?: RoutePoints;
   approachStart?: [number, number];
 };
+
+const ROUTE_GREEN = "#16a34a";
+const ROUTE_RED = "#b91c1c";
+const ROUTE_BLUE = "#005be2";
+const TRIP_ROUTE_PARTS = ["points", "green", "red", "blue"] as const;
+const TRIP_ROUTE_LAYER_PATTERN = /^trip-route-(.+)-(?:points|green|red|blue)$/;
+
+/** A truck this close to the pickup point counts as having reached it. */
+const PICKUP_REACHED_METERS = 150;
+/** A truck this close to the planned route counts as driving on it. */
+const ON_ROUTE_METERS = 75;
+/** How far past the pickup a truck must be, moving forward, to count as started. */
+const STARTED_ALONG_ROUTE_METERS = 200;
+
+function tripRouteId(truckId: string, part: (typeof TRIP_ROUTE_PARTS)[number]) {
+  return `trip-route-${truckId}-${part}`;
+}
+
+function removeTripRoute(map: Map, truckId: string) {
+  for (const part of TRIP_ROUTE_PARTS) {
+    const id = tripRouteId(truckId, part);
+    if (map.getLayer(id)) map.removeLayer(id);
+    if (map.getSource(id)) map.removeSource(id);
+  }
+}
+
+function setGeoJsonData(map: Map, id: string, data: GeoJSONData) {
+  const source = map.getSource(id);
+  if (source && "setData" in source && typeof source.setData === "function") {
+    source.setData(data);
+    return true;
+  }
+  return false;
+}
+
+function drawTripRouteLine(
+  map: Map,
+  id: string,
+  color: string,
+  coordinates: RoutePoints,
+  beforeId: string
+) {
+  if (coordinates.length < 2) {
+    if (map.getLayer(id)) map.removeLayer(id);
+    if (map.getSource(id)) map.removeSource(id);
+    return;
+  }
+  const data: Feature = {
+    type: "Feature",
+    properties: {},
+    geometry: { type: "LineString", coordinates },
+  };
+  if (setGeoJsonData(map, id, data)) return;
+  map.addSource(id, { type: "geojson", data });
+  map.addLayer({
+    id,
+    type: "line",
+    source: id,
+    layout: { "line-join": "round", "line-cap": "round" },
+    paint: {
+      "line-color": color,
+      "line-width": 3.5,
+      "line-blur": 0,
+      "line-opacity": 0.9,
+    },
+  }, map.getLayer(beforeId) ? beforeId : undefined);
+}
+
+/**
+ * Draws one trip's route: green from the truck to the pickup before the trip starts,
+ * then red for the part already driven and blue for the part left. Returns the route
+ * segment the truck was snapped to, so the next draw can search forward from it.
+ */
+function drawTripRoute(
+  map: Map,
+  truckId: string,
+  destinationRoute: RoutePoints,
+  approachRoute: RoutePoints | undefined,
+  started: boolean,
+  truckPosition: [number, number] | undefined,
+  fromSegment: number
+): number | undefined {
+  const pickup = destinationRoute[0];
+  const dropoff = destinationRoute[destinationRoute.length - 1];
+
+  let traveled: RoutePoints = [];
+  let remaining = destinationRoute;
+  let truckPoint = truckPosition;
+  let segment: number | undefined;
+
+  if (started && truckPosition) {
+    const projection = projectOntoRoute(destinationRoute, truckPosition, fromSegment);
+    if (projection) {
+      ({ traveled, remaining } = splitRoute(destinationRoute, projection));
+      truckPoint = projection.point;
+      segment = projection.segment;
+    }
+  }
+
+  const pointsId = tripRouteId(truckId, "points");
+  drawTripRouteLine(
+    map,
+    tripRouteId(truckId, "green"),
+    ROUTE_GREEN,
+    !started && approachRoute ? approachRoute : [],
+    pointsId
+  );
+  drawTripRouteLine(map, tripRouteId(truckId, "red"), ROUTE_RED, traveled, pointsId);
+  drawTripRouteLine(map, tripRouteId(truckId, "blue"), ROUTE_BLUE, remaining, pointsId);
+
+  const dots: { coordinates: [number, number]; color: string }[] = [
+    { coordinates: pickup, color: started ? ROUTE_RED : ROUTE_BLUE },
+    { coordinates: dropoff, color: ROUTE_BLUE },
+  ];
+  if (truckPoint) {
+    dots.push({ coordinates: truckPoint, color: started ? ROUTE_RED : ROUTE_GREEN });
+  }
+  const data: FeatureCollection = {
+    type: "FeatureCollection",
+    features: dots.map(({ coordinates, color }) => ({
+      type: "Feature",
+      properties: { color },
+      geometry: { type: "Point", coordinates },
+    })),
+  };
+  if (!setGeoJsonData(map, pointsId, data)) {
+    map.addSource(pointsId, { type: "geojson", data });
+    map.addLayer({
+      id: pointsId,
+      type: "circle",
+      source: pointsId,
+      paint: {
+        "circle-radius": 6,
+        "circle-color": ["get", "color"],
+        "circle-stroke-width": 2,
+        "circle-stroke-color": "#ffffff",
+      },
+    });
+  }
+
+  return segment;
+}
 
 function completedTripIds(): Set<string> {
   return new Set(
@@ -224,7 +369,15 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
   const routeRetryAtRef = useRef(new globalThis.Map<string, number>());
   const approachPendingRef = useRef(new Set<string>());
   const approachRetryAtRef = useRef(new globalThis.Map<string, number>());
-  const startedTripsRef = useRef(new Set<string>());
+  const [initialStartedTripIds] = useState(() => new Set(readStartedTripIds()));
+  const startedTripsRef = useRef(initialStartedTripIds);
+  /** Last distance along the destination route seen for each not-yet-started trip. */
+  const lastAlongRouteRef = useRef(new globalThis.Map<string, number>());
+  /** Route segment the selected trip's truck was last snapped to, per trip. */
+  const routeProgressRef = useRef(
+    new globalThis.Map<string, { route: RoutePoints; segment: number }>()
+  );
+  const styleLoadedRef = useRef(false);
   const routeSelectionRequestRef = useRef(0);
   const activeTripIdsRef = useRef(new Set<string>());
   const deletedTruckIdsRef = useRef(new Set<string>());
@@ -431,6 +584,31 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
     setTripRoute(value);
   }
 
+  /** Draws the selected trip's route at the truck marker's current position. Reads only refs. */
+  function drawSelectedRoute() {
+    const map = mapRef.current;
+    const selection = tripRouteRef.current;
+    if (!map || !styleLoadedRef.current || tabRef.current !== "map" || !selection) {
+      return;
+    }
+    const cachedRoute = routeCacheRef.current.get(selection.tripId);
+    const destination = cachedRoute?.destination ?? selection.points;
+    const lngLat = markersRef.current.get(selection.truckId)?.getLngLat();
+    const progress = routeProgressRef.current.get(selection.tripId);
+    const segment = drawTripRoute(
+      map,
+      selection.truckId,
+      destination,
+      cachedRoute?.approach,
+      startedTripsRef.current.has(selection.tripId),
+      lngLat ? [lngLat.lng, lngLat.lat] : undefined,
+      progress?.route === destination ? progress.segment : 0
+    );
+    if (segment !== undefined) {
+      routeProgressRef.current.set(selection.tripId, { route: destination, segment });
+    }
+  }
+
   useEffect(() => {
     getCurrentUser()
       .then((user) => setUsername(user.username))
@@ -608,7 +786,8 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
           Math.abs(lng) <= 180
       );
 
-    if (tab !== "history" || points.length === 0 || !map.isStyleLoaded()) {
+    // isStyleLoaded() is also false while tiles are loading, so use the load flag instead.
+    if (tab !== "history" || points.length === 0 || !mapReady) {
       clearRoute();
       return;
     }
@@ -736,207 +915,42 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map || !mapReady) return;
 
-    if (!map) return;
+    const selection =
+      tab === "map" && tripRoute && !completedTripIds().has(tripRoute.tripId)
+        ? tripRoute
+        : null;
 
-    const removeRoute = (suffix: string) => {
-      let currentStyle;
-      try {
-        currentStyle = map.getStyle();
-      } catch {
-        currentStyle = undefined;
-      }
-      if (!currentStyle) return;
-      for (const layer of currentStyle.layers ?? []) {
-        if (layer.id.startsWith(`trip-route-${suffix}-`)) {
-          map.removeLayer(layer.id);
-        }
-      }
-      for (const sourceId of Object.keys(currentStyle.sources ?? {})) {
-        if (sourceId.startsWith(`trip-route-${suffix}-`)) {
-          map.removeSource(sourceId);
-        }
-      }
-    };
-
-    const setGeoJsonData = (id: string, data: object) => {
-      const source = map.getSource(id);
-      if (source && "setData" in source && typeof source.setData === "function") {
-        source.setData(data);
-        return true;
-      }
-      return false;
-    };
-
-    const drawSplitRoute = (
-      suffix: string,
-      destinationRoute: RoutePoints,
-      approachRoute: RoutePoints | undefined,
-      withDots: boolean,
-      hasReachedSource: boolean
-    ) => {
-      const source = destinationRoute[0];
-      const truckLngLat = markersRef.current.get(suffix)?.getLngLat();
-      const truckPosition = truckLngLat
-        ? ([truckLngLat.lng, truckLngLat.lat] as [number, number])
-        : undefined;
-      const GREEN = "#16a34a";
-      const RED = "#b91c1c";
-      const BLUE = "#005be2";
-
-      const addLine = (id: string, color: string, coordinates: [number, number][]) => {
-        const data = {
-          type: "Feature" as const,
-          properties: {},
-          geometry: { type: "LineString" as const, coordinates },
-        };
-        if (!setGeoJsonData(id, data)) {
-          map.addSource(id, { type: "geojson", data });
-          map.addLayer({
-            id,
-            type: "line",
-            source: id,
-            layout: { "line-join": "round", "line-cap": "round" },
-            paint: {
-              "line-color": color,
-              "line-width": 3.5,
-              "line-blur": 0,
-              "line-opacity": 0.9,
-            },
-          });
-        }
-      };
-
-      const removeLine = (id: string) => {
-        if (map.getLayer(id)) map.removeLayer(id);
-        if (map.getSource(id)) map.removeSource(id);
-      };
-
-      let traveledRoute: RoutePoints | undefined;
-      let remainingRoute = destinationRoute;
-      const beforeSource = !hasReachedSource;
-
-      if (truckPosition) {
-        let nearestIndex = -1;
-        let nearestDistance = Number.POSITIVE_INFINITY;
-        for (let index = 0; index < destinationRoute.length; index += 1) {
-          const [lng, lat] = destinationRoute[index];
-          const distance =
-            (lng - truckPosition[0]) ** 2 + (lat - truckPosition[1]) ** 2;
-          if (distance < nearestDistance) {
-            nearestDistance = distance;
-            nearestIndex = index;
-          }
-        }
-
-        if (!beforeSource && nearestIndex >= 0) {
-          traveledRoute = [...destinationRoute.slice(0, nearestIndex + 1), truckPosition];
-          remainingRoute = [truckPosition, ...destinationRoute.slice(nearestIndex)];
-        }
-      }
-
-      if (beforeSource && approachRoute && approachRoute.length >= 2) {
-        addLine(`trip-route-${suffix}-green`, GREEN, approachRoute);
-      } else {
-        removeLine(`trip-route-${suffix}-green`);
-      }
-      if (!beforeSource && traveledRoute && traveledRoute.length >= 2) {
-        addLine(`trip-route-${suffix}-red`, RED, traveledRoute);
-      } else {
-        removeLine(`trip-route-${suffix}-red`);
-      }
-      addLine(`trip-route-${suffix}-blue`, BLUE, remainingRoute);
-
-      if (withDots) {
-        const pointsId = `trip-route-${suffix}-points`;
-        const data = {
-          type: "FeatureCollection" as const,
-          features: [
-            {
-              coordinates: beforeSource ? approachRoute?.[0] ?? source : source,
-              color: beforeSource && approachRoute ? GREEN : beforeSource ? BLUE : RED,
-            },
-            {
-              coordinates: truckPosition ?? source,
-              color: beforeSource && truckPosition && approachRoute ? GREEN : RED,
-            },
-            { coordinates: destinationRoute[destinationRoute.length - 1], color: BLUE },
-          ].map(({ coordinates, color }) => ({
-            type: "Feature" as const,
-            properties: { color },
-            geometry: { type: "Point" as const, coordinates },
-          })),
-        };
-        if (!setGeoJsonData(pointsId, data)) {
-          map.addSource(pointsId, { type: "geojson", data });
-          map.addLayer({
-            id: pointsId,
-            type: "circle",
-            source: pointsId,
-            paint: {
-              "circle-radius": 6,
-              "circle-color": ["get", "color"],
-              "circle-stroke-width": 2,
-              "circle-stroke-color": "#ffffff",
-            },
-          });
-        }
-      }
-    };
-
-    const completed = completedTripIds();
-    const activeSelection =
-      tripRoute && !completed.has(tripRoute.tripId) ? tripRoute : null;
-    const routeSuffixes = new Set<string>();
-    if (activeSelection) {
-      routeSuffixes.add(activeSelection.truckId);
-    }
-
-    let currentStyle;
-    try {
-      currentStyle = map.getStyle();
-    } catch {
-      currentStyle = undefined;
-    }
-    const staleRouteSuffixes = new Set<string>();
-    for (const layer of currentStyle?.layers ?? []) {
-      if (!layer.id.startsWith("trip-route-")) continue;
-      const suffix = layer.id
-        .slice("trip-route-".length)
-        .replace(/-(red|blue|green|points)$/, "");
-      if (!routeSuffixes.has(suffix)) {
-        staleRouteSuffixes.add(suffix);
+    const staleTruckIds = new Set<string>();
+    for (const layer of map.getStyle().layers ?? []) {
+      const truckId = TRIP_ROUTE_LAYER_PATTERN.exec(layer.id)?.[1];
+      if (truckId !== undefined && truckId !== selection?.truckId) {
+        staleTruckIds.add(truckId);
       }
     }
-    for (const suffix of staleRouteSuffixes) {
-      removeRoute(suffix);
+    for (const truckId of staleTruckIds) {
+      removeTripRoute(map, truckId);
     }
 
-    if (activeSelection) {
-      const cachedRoute = routeCacheRef.current.get(activeSelection.tripId);
-      drawSplitRoute(
-        activeSelection.truckId,
-        cachedRoute?.destination ?? activeSelection.points,
-        cachedRoute?.approach,
-        true,
-        startedTripsRef.current.has(activeSelection.tripId)
-      );
+    if (!selection) return;
 
+    drawSelectedRoute();
+
+    if (lastFittedRoute.current !== selection) {
+      lastFittedRoute.current = selection;
+      const cachedRoute = routeCacheRef.current.get(selection.tripId);
       const points = [
         ...(cachedRoute?.approach ?? []),
-        ...(cachedRoute?.destination ?? activeSelection.points),
+        ...(cachedRoute?.destination ?? selection.points),
       ];
       const bounds = new LngLatBounds(points[0], points[0]);
       for (const coordinates of points) {
         bounds.extend(coordinates);
       }
-      if (lastFittedRoute.current !== activeSelection) {
-        lastFittedRoute.current = activeSelection;
-        map.fitBounds(bounds, { padding: 70, maxZoom: 12, duration: 600 });
-      }
+      map.fitBounds(bounds, { padding: 70, maxZoom: 12, duration: 600 });
     }
-
-  }, [tripRoute, truckTick]);
+  }, [tripRoute, truckTick, mapReady, tab]);
 
   async function goToLogin() {
     stopDemo();
@@ -949,6 +963,17 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
   }
 
   function showTrip(trip: Trip) {
+    const cachedRoute = routeCacheRef.current.get(trip.tripId);
+    if (cachedRoute?.destination && !completedTripIds().has(trip.tripId)) {
+      routeSelectionRequestRef.current += 1;
+      updateTripRoute({
+        tripId: trip.tripId,
+        truckId: trip.truckId,
+        points: cachedRoute.destination,
+      });
+      return;
+    }
+
     updateTripRoute(null);
     const requestId = routeSelectionRequestRef.current;
 
@@ -967,7 +992,9 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
           console.error("No road route was returned for this trip.");
           return;
         }
-        routeCacheRef.current.set(trip.tripId, { destination: points });
+        // Keep any approach route already fetched for this trip.
+        const current = routeCacheRef.current.get(trip.tripId);
+        routeCacheRef.current.set(trip.tripId, { ...current, destination: points });
         updateTripRoute({ tripId: trip.tripId, truckId: trip.truckId, points });
       })
       .catch((error) => {
@@ -999,7 +1026,11 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
     }
 
     mapRef.current = map;
-    queueMicrotask(() => setMapReady(true));
+    // Sources and layers can only be added once the style has loaded.
+    map.once("load", () => {
+      styleLoadedRef.current = true;
+      setMapReady(true);
+    });
 
     map.addControl(new NavigationControl(), "top-right");
 
@@ -1055,6 +1086,10 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
           fromLng + (lng - fromLng) * eased,
           fromLat + (lat - fromLat) * eased,
         ]);
+        // Keep the driven/remaining split on the selected route under the moving marker.
+        if (tripRouteRef.current?.truckId === truckId) {
+          drawSelectedRoute();
+        }
         if (progress < 1) {
           record.frame = requestAnimationFrame(step);
         } else {
@@ -1182,14 +1217,41 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
         for (const trip of ongoing) {
           desired.add(trip.truckId);
           const truck = visibleTrucks.find((item) => item.truckId === trip.truckId);
-          if (truck) {
-            const longitudeDelta = truck.longitude - trip.source.longitude;
-            const latitudeDelta = truck.latitude - trip.source.latitude;
-            if (longitudeDelta ** 2 + latitudeDelta ** 2 <= 0.000001) {
-              startedTripsRef.current.add(trip.tripId);
+          if (!truck || startedTripsRef.current.has(trip.tripId)) continue;
+
+          // A trip has started once the truck reaches the pickup point. Polls are a few
+          // seconds apart and can miss that moment, so also count it as started when the
+          // truck is on the planned route past the pickup and moving forward along it.
+          const position: [number, number] = [truck.longitude, truck.latitude];
+          const pickup: [number, number] = [trip.source.longitude, trip.source.latitude];
+          const cachedRoute = routeCacheRef.current.get(trip.tripId);
+          let started = distanceMeters(position, pickup) <= PICKUP_REACHED_METERS;
+          if (!started && cachedRoute) {
+            const projection = projectOntoRoute(cachedRoute.destination, position);
+            const previousAlong = lastAlongRouteRef.current.get(trip.tripId);
+            if (projection && projection.distanceMeters <= ON_ROUTE_METERS) {
+              started =
+                previousAlong !== undefined &&
+                projection.alongMeters >= STARTED_ALONG_ROUTE_METERS &&
+                projection.alongMeters > previousAlong;
+              lastAlongRouteRef.current.set(trip.tripId, projection.alongMeters);
+            } else {
+              lastAlongRouteRef.current.delete(trip.tripId);
             }
           }
+          if (started) {
+            startedTripsRef.current.add(trip.tripId);
+            lastAlongRouteRef.current.delete(trip.tripId);
+          }
         }
+
+        // Remember started trips across reloads. Keep only the most recent ones so the
+        // stored list can't grow without bound.
+        const startedIds = [...startedTripsRef.current];
+        if (startedIds.length > 200) {
+          startedTripsRef.current = new Set(startedIds.slice(-200));
+        }
+        writeStartedTripIds(startedTripsRef.current);
 
         if (tabRef.current !== "map") {
           desired.clear();
@@ -1255,6 +1317,8 @@ export default function TruckMap({ onSignedOut }: TruckMapProps) {
               (approachStart[1] - previousStart[1]) ** 2 >
               0.000001;
           if (
+            // Once the trip has started there is no approach leg left to draw.
+            startedTripsRef.current.has(trip.tripId) ||
             !movedEnough ||
             approachPendingRef.current.has(trip.tripId) ||
             (approachRetryAtRef.current.get(trip.tripId) ?? 0) > Date.now()

@@ -28,6 +28,29 @@ export function writeStoredTrips(trips: Trip[]): void {
   }
 }
 
+const STARTED_TRIPS_STORAGE_KEY = "coldchain.startedTrips";
+
+/** Trip IDs whose truck has reached the pickup point and is driving to the destination. */
+export function readStartedTripIds(): string[] {
+  try {
+    const raw = window.localStorage.getItem(STARTED_TRIPS_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((id): id is string => typeof id === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function writeStartedTripIds(tripIds: Iterable<string>): void {
+  try {
+    window.localStorage.setItem(STARTED_TRIPS_STORAGE_KEY, JSON.stringify([...tripIds]));
+  } catch {
+    console.error("Could not persist started trips locally");
+  }
+}
+
 export function setStoredTripStatus(tripId: string, status: TripStatus): void {
   writeStoredTrips(
     readStoredTrips().map((trip) =>
